@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>AegisScan Report</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    h1 { border-bottom: 2px solid #333; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { padding: 0.5rem; border: 1px solid #ddd; text-align: left; }
+    th { background: #f5f5f5; }
+    .summary { background: #e8f4fd; padding: 1rem; border-radius: 6px; margin: 1rem 0; }
+    .high { color: #b91c1c; }
+    .medium { color: #b45309; }
+    .meta { color: #666; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>AegisScan 리포트</h1>
+  <p class="meta">생성 시각: 2026-03-05T14:28:13.679623</p>
+
+  <div class="summary">
+    <h2>Executive Summary</h2>
+    <ul>
+      <li>총 호스트 수: <strong>0</strong></li>
+      <li>열린 포트 수: <strong>0</strong></li>
+      <li>차이/발견 수 (Connect vs SYN, 외부 노출 등): <strong>0</strong></li>
+    </ul>
+  </div>
+
+  <h2>High Risk Findings</h2>
+  <table>
+    <thead><tr><th>유형</th><th>심각도</th><th>요약</th></tr></thead>
+    <tbody>
+      
+      <tr><td colspan="3">없음</td></tr>
+      
+    </tbody>
+  </table>
+
+  <h2>열린 포트 Top</h2>
+  <table>
+    <thead><tr><th>포트</th><th>건수</th></tr></thead>
+    <tbody>
+      
+      <tr><td colspan="2">없음</td></tr>
+      
+    </tbody>
+  </table>
+
+  <h2>TLS 인증서 (수집 항목)</h2>
+  <table>
+    <thead><tr><th>호스트</th><th>포트</th><th>만료일</th></tr></thead>
+    <tbody>
+      
+      <tr><td colspan="3">없음</td></tr>
+      
+    </tbody>
+  </table>
+
+  <h2>Remediation Checklist</h2>
+  <ul>
+    <li>외부에만 노출된 포트(Shadow exposure): 방화벽/보안그룹에서 차단 검토</li>
+    <li>Connect vs SYN 불일치: 필터링 장비/방화벽 정책 확인</li>
+    <li>TLS 만료 임박: 인증서 갱신</li>
+    <li>관리 포트(22, 3389 등) 외부 노출: VPN/점프호스트로 제한</li>
+  </ul>
+
+  <p class="meta">— AegisScan</p>
+</body>
+</html>

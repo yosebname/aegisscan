@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aegisscan"
+version = "0.1.0"
+description = "포트 스캔 기반 공격표면(Attack Surface) 통합 분석·리포팅 플랫폼"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "AegisScan Team" }]
+keywords = ["security", "port-scan", "attack-surface", "nmap", "shodan"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "aiofiles>=23.0.0",
+    "aiosqlite>=0.19.0",
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "jinja2>=3.1.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "greenlet>=3.0.0",
+    "sqlalchemy>=2.0.0",
+    "scapy>=2.5.0",
+    "httpx>=0.26.0",
+    "cryptography>=42.0.0",
+    "weasyprint>=60.0; sys_platform != 'win32'",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.23", "black", "ruff"]
+
+[project.scripts]
+aegisscan = "aegisscan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aegisscan = ["templates/**"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AegisScan 대시보드</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --accent: #3b82f6; --text: #e6edf3; --muted: #8b949e; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1.5rem; line-height: 1.5; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    a { color: var(--accent); }
+    .card { background: var(--card); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 1rem; margin: 0 0 0.5rem 0; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    th { color: var(--muted); font-weight: 600; }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.85rem; }
+    .badge.high { background: #7f1d1d; color: #fca5a5; }
+    .badge.medium { background: #78350f; color: #fde68a; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat { background: var(--card); padding: 1rem; border-radius: 8px; }
+    .stat .val { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .stat .label { font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>🛡️ AegisScan 대시보드</h1>
+  <p>포트 스캔 기반 공격표면 통합 분석 · <a href="/docs">API 문서</a></p>
+
+  <div class="grid" id="stats">
+    <div class="stat"><div class="val" id="totalHosts">-</div><div class="label">호스트 수</div></div>
+    <div class="stat"><div class="val" id="openPorts">-</div><div class="label">열린 포트 수</div></div>
+    <div class="stat"><div class="val" id="findings">-</div><div class="label">차이/발견 수</div></div>
+  </div>
+
+  <div class="card">
+    <h2>열린 포트 Top</h2>
+    <table><thead><tr><th>포트</th><th>건수</th></tr></thead><tbody id="topPorts"></tbody></table>
+  </div>
+  <div class="card">
+    <h2>Connect vs SYN 불일치 / 외부 노출 발견</h2>
+    <table><thead><tr><th>유형</th><th>심각도</th><th>요약</th></tr></thead><tbody id="diffFindings"></tbody></table>
+  </div>
+  <div class="card">
+    <h2>TLS 만료 임박</h2>
+    <table><thead><tr><th>호스트</th><th>포트</th><th>만료일</th></tr></thead><tbody id="tlsExpiring"></tbody></table>
+  </div>
+
+  <script>
+    async function get(path) {
+      const r = await fetch(path);
+      if (!r.ok) throw new Error(r.statusText);
+      return r.json();
+    }
+    async function load() {
+      try {
+        const [stats, topPorts, findings, tls] = await Promise.all([
+          get('/api/stats'),
+          get('/api/open-ports-top?limit=15'),
+          get('/api/diff-findings'),
+          get('/api/tls-expiring?days=30')
+        ]);
+        document.getElementById('totalHosts').textContent = stats.total_hosts ?? '-';
+        document.getElementById('openPorts').textContent = stats.open_ports_count ?? '-';
+        document.getElementById('findings').textContent = stats.diff_findings_count ?? '-';
+        document.getElementById('topPorts').innerHTML = (topPorts || []).map(p => `<tr><td>${p.port}</td><td>${p.count}</td></tr>`).join('') || '<tr><td colspan="2">데이터 없음</td></tr>';
+        document.getElementById('diffFindings').innerHTML = (findings || []).slice(0, 20).map(f => `<tr><td>${f.finding_type}</td><td><span class="badge ${f.severity}">${f.severity}</span></td><td>${(f.summary || '').slice(0, 80)}</td></tr>`).join('') || '<tr><td colspan="3">데이터 없음</td></tr>';
+        document.getElementById('tlsExpiring').innerHTML = (tls || []).map(t => `<tr><td>${t.host_ip}</td><td>${t.port}</td><td>${t.not_after || '-'}</td></tr>`).join('') || '<tr><td colspan="3">데이터 없음</td></tr>';
+      } catch (e) {
+        console.error(e);
+        document.getElementById('topPorts').innerHTML = '<tr><td colspan="2">API 오류 또는 데이터 없음</td></tr>';
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

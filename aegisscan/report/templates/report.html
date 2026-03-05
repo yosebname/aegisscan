@@ -1,0 +1,1470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AegisScan Security Report - {{ scan_data.scan_id }}</title>
+    <style>
+        /* ============================================================================
+           BASE STYLES & VARIABLES
+           ============================================================================ */
+        
+        :root {
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e40af;
+            --secondary-color: #0f766e;
+            --accent-color: #dc2626;
+            --warning-color: #f59e0b;
+            --success-color: #10b981;
+            --info-color: #3b82f6;
+            --danger-color: #ef4444;
+            
+            --severity-critical: #dc3545;
+            --severity-high: #fd7e14;
+            --severity-medium: #ffc107;
+            --severity-low: #0d6efd;
+            --severity-info: #6c757d;
+            
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-light: #f3f4f6;
+            
+            --border-color: #e5e7eb;
+            --border-dark: #d1d5db;
+            --bg-light: #f9fafb;
+            --bg-lighter: #ffffff;
+            
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'Menlo', 'Monaco', 'Courier New', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            font-size: 16px;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            color: var(--text-primary);
+            background-color: var(--bg-light);
+            line-height: 1.6;
+        }
+
+        /* ============================================================================
+           TYPOGRAPHY
+           ============================================================================ */
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 600;
+            line-height: 1.3;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+        }
+
+        h2 {
+            font-size: 2rem;
+            color: var(--primary-color);
+            margin-top: 2.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 3px solid var(--accent-color);
+        }
+
+        h3 {
+            font-size: 1.5rem;
+            color: var(--primary-dark);
+            margin-top: 1.5rem;
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        code {
+            background-color: var(--bg-light);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: #d63384;
+        }
+
+        pre {
+            background-color: var(--text-primary);
+            color: #e5e7eb;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #e5e7eb;
+        }
+
+        /* ============================================================================
+           CONTAINER & LAYOUT
+           ============================================================================ */
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 3rem 1rem;
+            margin-bottom: 3rem;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .header h1 {
+            color: white;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .subtitle {
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 1rem;
+        }
+
+        .header-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        .header-meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .header-meta-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .header-meta-value {
+            color: white;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .main-content {
+            background-color: white;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border-color);
+            margin-top: 3rem;
+        }
+
+        /* ============================================================================
+           CARDS & METRICS
+           ============================================================================ */
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, var(--bg-lighter) 0%, var(--bg-light) 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+        }
+
+        .metric-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+            color: var(--primary-color);
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .metric-card.critical .metric-value {
+            color: var(--severity-critical);
+        }
+
+        .metric-card.high .metric-value {
+            color: var(--severity-high);
+        }
+
+        .metric-card.medium .metric-value {
+            color: var(--severity-medium);
+        }
+
+        .metric-card.low .metric-value {
+            color: var(--severity-low);
+        }
+
+        /* ============================================================================
+           BADGES & SEVERITY INDICATORS
+           ============================================================================ */
+
+        .badge {
+            display: inline-block;
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-critical {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--severity-critical);
+            border: 1px solid rgba(220, 53, 69, 0.2);
+        }
+
+        .badge-high {
+            background-color: rgba(253, 126, 20, 0.1);
+            color: var(--severity-high);
+            border: 1px solid rgba(253, 126, 20, 0.2);
+        }
+
+        .badge-medium {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: #856404;
+            border: 1px solid rgba(255, 193, 7, 0.2);
+        }
+
+        .badge-low {
+            background-color: rgba(13, 110, 253, 0.1);
+            color: var(--severity-low);
+            border: 1px solid rgba(13, 110, 253, 0.2);
+        }
+
+        .badge-info {
+            background-color: rgba(108, 117, 125, 0.1);
+            color: var(--severity-info);
+            border: 1px solid rgba(108, 117, 125, 0.2);
+        }
+
+        .badge-success {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .severity-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .severity-dot.critical {
+            background-color: var(--severity-critical);
+        }
+
+        .severity-dot.high {
+            background-color: var(--severity-high);
+        }
+
+        .severity-dot.medium {
+            background-color: var(--severity-medium);
+        }
+
+        .severity-dot.low {
+            background-color: var(--severity-low);
+        }
+
+        .severity-dot.info {
+            background-color: var(--severity-info);
+        }
+
+        /* ============================================================================
+           TABLES
+           ============================================================================ */
+
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 2rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        thead {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            user-select: none;
+            cursor: pointer;
+            position: relative;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            background-color: var(--primary-dark);
+        }
+
+        th::after {
+            content: ' ▼';
+            font-size: 0.7rem;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        th.sortable:hover::after {
+            opacity: 0.5;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        tbody tr:hover {
+            background-color: var(--bg-light);
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: var(--bg-lighter);
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #fafafa;
+        }
+
+        /* ============================================================================
+           RISK ASSESSMENT
+           ============================================================================ */
+
+        .risk-score-container {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .risk-score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .risk-score-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-align: center;
+            display: block;
+            color: white;
+        }
+
+        .risk-score-label {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.9);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .risk-score-circle.critical {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+
+        .risk-score-circle.high {
+            background: linear-gradient(135deg, #fd7e14 0%, #e26800 100%);
+        }
+
+        .risk-score-circle.medium {
+            background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+        }
+
+        .risk-score-circle.low {
+            background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+        }
+
+        .risk-score-circle.minimal {
+            background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+        }
+
+        .risk-score-details {
+            flex: 1;
+        }
+
+        .risk-bar {
+            display: flex;
+            height: 40px;
+            background-color: var(--bg-light);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .risk-segment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: opacity 0.3s;
+        }
+
+        .risk-segment:hover {
+            opacity: 0.9;
+        }
+
+        .risk-segment.critical {
+            background-color: var(--severity-critical);
+        }
+
+        .risk-segment.high {
+            background-color: var(--severity-high);
+        }
+
+        .risk-segment.medium {
+            background-color: var(--severity-medium);
+        }
+
+        .risk-segment.low {
+            background-color: var(--severity-low);
+        }
+
+        .risk-segment.info {
+            background-color: var(--severity-info);
+        }
+
+        /* ============================================================================
+           FORMS & CHECKBOXES
+           ============================================================================ */
+
+        .checklist {
+            list-style: none;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            gap: 1rem;
+        }
+
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+
+        .checklist-checkbox {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            cursor: pointer;
+            accent-color: var(--primary-color);
+        }
+
+        .checklist-content {
+            flex: 1;
+        }
+
+        .checklist-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .checklist-remediation {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .checklist-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* ============================================================================
+           FINDING CARDS
+           ============================================================================ */
+
+        .finding-card {
+            border-left: 4px solid;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            background-color: var(--bg-light);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .finding-card.critical {
+            border-left-color: var(--severity-critical);
+            background-color: rgba(220, 53, 69, 0.03);
+        }
+
+        .finding-card.high {
+            border-left-color: var(--severity-high);
+            background-color: rgba(253, 126, 20, 0.03);
+        }
+
+        .finding-card.medium {
+            border-left-color: var(--severity-medium);
+            background-color: rgba(255, 193, 7, 0.03);
+        }
+
+        .finding-card.low {
+            border-left-color: var(--severity-low);
+            background-color: rgba(13, 110, 253, 0.03);
+        }
+
+        .finding-card.info {
+            border-left-color: var(--severity-info);
+            background-color: rgba(108, 117, 125, 0.03);
+        }
+
+        .finding-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .finding-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .finding-meta {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .finding-description {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .finding-remediation {
+            background-color: rgba(16, 185, 129, 0.05);
+            border-left: 3px solid var(--success-color);
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            margin-top: 0.75rem;
+        }
+
+        .finding-remediation strong {
+            color: var(--success-color);
+        }
+
+        /* ============================================================================
+           SECTION STYLES
+           ============================================================================ */
+
+        .section {
+            margin-bottom: 3rem;
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .section-icon {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .subsection {
+            margin-bottom: 2rem;
+        }
+
+        .subsection-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* ============================================================================
+           COMPARISON STYLES
+           ============================================================================ */
+
+        .comparison-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .comparison-cell {
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--bg-light);
+        }
+
+        .comparison-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .comparison-value {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            word-break: break-all;
+        }
+
+        .comparison-mismatch {
+            background-color: rgba(220, 53, 69, 0.08);
+            border-color: var(--severity-critical);
+        }
+
+        .comparison-match {
+            background-color: rgba(16, 185, 129, 0.08);
+            border-color: var(--success-color);
+        }
+
+        /* ============================================================================
+           TLS CERTIFICATE STYLES
+           ============================================================================ */
+
+        .cert-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .cert-status.valid {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+
+        .cert-status.expiring {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: var(--warning-color);
+        }
+
+        .cert-status.expired {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--severity-critical);
+        }
+
+        .cert-status.unknown {
+            background-color: rgba(108, 117, 125, 0.1);
+            color: var(--severity-info);
+        }
+
+        /* ============================================================================
+           EXTERNAL EXPOSURE STYLES
+           ============================================================================ */
+
+        .exposure-indicator {
+            display: inline-block;
+            padding: 0.35rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .exposure-yes {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--severity-critical);
+        }
+
+        .exposure-no {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+
+        /* ============================================================================
+           PRINT STYLES
+           ============================================================================ */
+
+        @media print {
+            body {
+                background-color: white;
+            }
+
+            .header {
+                margin-bottom: 2rem;
+                page-break-after: avoid;
+            }
+
+            .main-content {
+                box-shadow: none;
+                border: none;
+                page-break-inside: avoid;
+            }
+
+            .section {
+                page-break-inside: avoid;
+                margin-bottom: 2rem;
+            }
+
+            .metric-card {
+                page-break-inside: avoid;
+            }
+
+            table {
+                page-break-inside: avoid;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+
+            h2 {
+                page-break-after: avoid;
+            }
+
+            .footer {
+                margin-top: 2rem;
+                border-top: 2px solid var(--border-color);
+            }
+        }
+
+        /* ============================================================================
+           RESPONSIVE DESIGN
+           ============================================================================ */
+
+        @media (max-width: 768px) {
+            html {
+                font-size: 14px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            h2 {
+                font-size: 1.5rem;
+            }
+
+            h3 {
+                font-size: 1.2rem;
+            }
+
+            .header {
+                padding: 2rem 1rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .main-content {
+                padding: 1.5rem 1rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+
+            .header-meta {
+                gap: 1rem;
+            }
+
+            .risk-score-container {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .risk-score-circle {
+                width: 100px;
+                height: 100px;
+            }
+
+            .risk-score-value {
+                font-size: 2rem;
+            }
+
+            .comparison-row {
+                grid-template-columns: 1fr;
+            }
+
+            table {
+                font-size: 0.85rem;
+            }
+
+            th, td {
+                padding: 0.75rem;
+            }
+
+            .finding-header {
+                flex-direction: column;
+            }
+
+            .checklist-item {
+                padding: 0.75rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-meta {
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            table {
+                font-size: 0.75rem;
+            }
+
+            th, td {
+                padding: 0.5rem;
+            }
+
+            .metric-value {
+                font-size: 2rem;
+            }
+        }
+
+        /* ============================================================================
+           UTILITY CLASSES
+           ============================================================================ */
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-muted {
+            color: var(--text-secondary);
+        }
+
+        .mt-0 { margin-top: 0; }
+        .mt-1 { margin-top: 0.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mt-3 { margin-top: 1.5rem; }
+        .mt-4 { margin-top: 2rem; }
+
+        .mb-0 { margin-bottom: 0; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        .mb-3 { margin-bottom: 1.5rem; }
+        .mb-4 { margin-bottom: 2rem; }
+
+        .d-flex {
+            display: flex;
+        }
+
+        .flex-wrap {
+            flex-wrap: wrap;
+        }
+
+        .gap-1 { gap: 0.5rem; }
+        .gap-2 { gap: 1rem; }
+        .gap-3 { gap: 1.5rem; }
+
+        .flex-1 {
+            flex: 1;
+        }
+
+        .flex-center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .no-wrap {
+            white-space: nowrap;
+        }
+
+        .break-word {
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <!-- HEADER -->
+    <div class="header">
+        <div class="container">
+            <h1>AegisScan Security Report</h1>
+            <p class="subtitle">Comprehensive network security assessment</p>
+            
+            <div class="header-meta">
+                <div class="header-meta-item">
+                    <span class="header-meta-label">Scan ID</span>
+                    <span class="header-meta-value">{{ scan_data.scan_id }}</span>
+                </div>
+                <div class="header-meta-item">
+                    <span class="header-meta-label">Target</span>
+                    <span class="header-meta-value">{{ scan_data.target }}</span>
+                </div>
+                <div class="header-meta-item">
+                    <span class="header-meta-label">Scan Date</span>
+                    <span class="header-meta-value">{{ scan_data.scan_date|format_timestamp }}</span>
+                </div>
+                <div class="header-meta-item">
+                    <span class="header-meta-label">Duration</span>
+                    <span class="header-meta-value">{{ "%.1f"|format(scan_data.duration_seconds) }}s</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <div class="container">
+            <!-- EXECUTIVE SUMMARY -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="section-icon">📊</span>
+                    <h2 style="margin: 0; border: none;">Executive Summary</h2>
+                </div>
+
+                <!-- Key Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">{{ executive_summary.total_hosts }}</div>
+                        <div class="metric-label">Total Hosts</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{{ executive_summary.total_open_ports }}</div>
+                        <div class="metric-label">Open Ports</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{{ executive_summary.total_services }}</div>
+                        <div class="metric-label">Services</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">{{ executive_summary.total_findings }}</div>
+                        <div class="metric-label">Total Findings</div>
+                    </div>
+                    <div class="metric-card critical">
+                        <div class="metric-value">{{ executive_summary.critical_count }}</div>
+                        <div class="metric-label">Critical</div>
+                    </div>
+                    <div class="metric-card high">
+                        <div class="metric-value">{{ executive_summary.high_count }}</div>
+                        <div class="metric-label">High</div>
+                    </div>
+                    <div class="metric-card medium">
+                        <div class="metric-value">{{ executive_summary.medium_count }}</div>
+                        <div class="metric-label">Medium</div>
+                    </div>
+                    <div class="metric-card low">
+                        <div class="metric-value">{{ executive_summary.low_count }}</div>
+                        <div class="metric-label">Low</div>
+                    </div>
+                </div>
+
+                <!-- Risk Score Overview -->
+                <div class="subsection">
+                    <div class="subsection-title">Overall Risk Assessment</div>
+                    <div class="risk-score-container">
+                        <div class="risk-score-circle {{ executive_summary.risk_score|risk_level|lower }}">
+                            <div>
+                                <span class="risk-score-value">{{ "%.1f"|format(executive_summary.risk_score) }}</span>
+                                <span class="risk-score-label">{{ executive_summary.risk_score|risk_level }}</span>
+                            </div>
+                        </div>
+                        <div class="risk-score-details">
+                            <p>Based on <strong>{{ executive_summary.total_findings }}</strong> findings across <strong>{{ executive_summary.total_hosts }}</strong> hosts and <strong>{{ executive_summary.total_open_ports }}</strong> open ports.</p>
+                            {% if executive_summary.external_exposure_count > 0 %}
+                            <p><strong>Warning:</strong> <span class="badge badge-critical">{{ executive_summary.external_exposure_count }} externally exposed </span>services detected.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Finding Distribution Bar -->
+                    {% if executive_summary.total_findings > 0 %}
+                    <div class="risk-bar">
+                        {% if executive_summary.critical_count > 0 %}
+                        <div class="risk-segment critical" style="width: {{ (executive_summary.critical_count / executive_summary.total_findings * 100)|int }}%;">
+                            Critical ({{ executive_summary.critical_count }})
+                        </div>
+                        {% endif %}
+                        {% if executive_summary.high_count > 0 %}
+                        <div class="risk-segment high" style="width: {{ (executive_summary.high_count / executive_summary.total_findings * 100)|int }}%;">
+                            High ({{ executive_summary.high_count }})
+                        </div>
+                        {% endif %}
+                        {% if executive_summary.medium_count > 0 %}
+                        <div class="risk-segment medium" style="width: {{ (executive_summary.medium_count / executive_summary.total_findings * 100)|int }}%;">
+                            Medium ({{ executive_summary.medium_count }})
+                        </div>
+                        {% endif %}
+                        {% if executive_summary.low_count > 0 %}
+                        <div class="risk-segment low" style="width: {{ (executive_summary.low_count / executive_summary.total_findings * 100)|int }}%;">
+                            Low ({{ executive_summary.low_count }})
+                        </div>
+                        {% endif %}
+                        {% if executive_summary.info_count > 0 %}
+                        <div class="risk-segment info" style="width: {{ (executive_summary.info_count / executive_summary.total_findings * 100)|int }}%;">
+                            Info ({{ executive_summary.info_count }})
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Top Exposed Ports -->
+                {% if executive_summary.top_exposed_ports %}
+                <div class="subsection">
+                    <div class="subsection-title">Top Exposed Ports</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                        {% for port, count in executive_summary.top_exposed_ports[:5] %}
+                        <div style="flex: 1; min-width: 150px; padding: 1rem; background-color: var(--bg-light); border-radius: 6px; border-left: 3px solid var(--accent-color);">
+                            <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary-color);">{{ port }}</div>
+                            <div style="color: var(--text-secondary); font-size: 0.9rem;">{{ count }} {{ "finding"|pluralize(count) }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Top Risky Hosts -->
+                {% if executive_summary.top_risky_hosts %}
+                <div class="subsection">
+                    <div class="subsection-title">Top Risky Hosts</div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Host</th>
+                                    <th>Finding Count</th>
+                                    <th>Critical</th>
+                                    <th>High</th>
+                                    <th>Medium</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for host, count in executive_summary.top_risky_hosts[:10] %}
+                                <tr>
+                                    <td><code>{{ host }}</code></td>
+                                    <td><strong>{{ count }}</strong></td>
+                                    <td>
+                                        {% set critical = findings_by_host[host]|selectattr('severity', 'equalto', 'critical')|list|length %}
+                                        {% if critical > 0 %}<span class="badge badge-critical">{{ critical }}</span>{% else %}-{% endif %}
+                                    </td>
+                                    <td>
+                                        {% set high = findings_by_host[host]|selectattr('severity', 'equalto', 'high')|list|length %}
+                                        {% if high > 0 %}<span class="badge badge-high">{{ high }}</span>{% else %}-{% endif %}
+                                    </td>
+                                    <td>
+                                        {% set medium = findings_by_host[host]|selectattr('severity', 'equalto', 'medium')|list|length %}
+                                        {% if medium > 0 %}<span class="badge badge-medium">{{ medium }}</span>{% else %}-{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- FINDINGS BY SEVERITY -->
+            <div class="section">
+                <div class="section-title">
+                    <span class="section-icon">🔍</span>
+                    <h2 style="margin: 0; border: none;">Security Findings</h2>
+                </div>
+
+                {% for severity in ['critical', 'high', 'medium', 'low', 'info'] %}
+                    {% if findings_by_severity[severity] %}
+                    <div class="subsection">
+                        <div class="subsection-title">
+                            <span class="severity-dot {{ severity }}"></span>
+                            {{ severity|capitalize }} Severity ({{ findings_by_severity[severity]|length }})
+                        </div>
+
+                        {% for finding in findings_by_severity[severity] %}
+                        <div class="finding-card {{ finding.severity }}">
+                            <div class="finding-header">
+                                <span class="finding-title">{{ finding.title }}</span>
+                                <div class="finding-meta">
+                                    <span class="badge badge-{{ finding.severity }}">{{ finding.severity|upper }}</span>
+                                    {% if finding.external_exposure %}
+                                    <span class="badge badge-critical">EXTERNAL</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 0.75rem; font-size: 0.9rem;">
+                                <div>
+                                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Host:</span>
+                                    <div><code>{{ finding.host }}</code></div>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Port:</span>
+                                    <div><code>{{ finding.port }}/{{ finding.protocol }}</code></div>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Service:</span>
+                                    <div>{{ finding.service }}</div>
+                                </div>
+                            </div>
+
+                            {% if finding.cve_ids %}
+                            <div style="margin-bottom: 0.75rem;">
+                                <span style="color: var(--text-secondary); font-size: 0.85rem;">CVEs:</span>
+                                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                    {% for cve in finding.cve_ids %}
+                                    <code style="background-color: rgba(220, 53, 69, 0.1);">{{ cve }}</code>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <div class="finding-description">{{ finding.description }}</div>
+
+                            {% if finding.tags %}
+                            <div style="margin-bottom: 0.75rem;">
+                                {% for tag in finding.tags %}
+                                <span class="badge badge-info" style="margin-right: 0.5rem;">{{ tag }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            {% if finding.remediation %}
+                            <div class="finding-remediation">
+                                <strong>Remediation:</strong> {{ finding.remediation }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                {% if not findings %}
+                <div style="padding: 2rem; background-color: rgba(16, 185, 129, 0.1); border-radius: 8px; text-align: center; color: var(--success-color); font-weight: 600;">
+                    ✓ No security findings detected
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- CONNECT VS SYN COMPARISON -->
+            {% if connect_vs_syn_comparison %}
+            <div class="section">
+                <div class="section-title">
+                    <span class="section-icon">🔄</span>
+                    <h2 style="margin: 0; border: none;">Connect vs SYN Comparison</h2>
+                </div>
+
+                <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
+                    This section compares results from full TCP connections vs SYN scans. Discrepancies may indicate intermediate firewalls or load balancers.
+                </p>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Host:Port</th>
+                                <th>Connect Result</th>
+                                <th>SYN Result</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for host_port, data in connect_vs_syn_comparison.items() %}
+                            <tr>
+                                <td><code>{{ host_port }}</code></td>
+                                <td>{{ data.connect_result }}</td>
+                                <td>{{ data.syn_result }}</td>
+                                <td>
+                                    {% if data.connect_result == data.syn_result %}
+                                    <span class="badge badge-success">Match</span>
+                                    {% else %}
+                                    <span class="badge badge-critical">Mismatch</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- TLS CERTIFICATE STATUS -->
+            {% if tls_certificates %}
+            <div class="section">
+                <div class="section-title">
+                    <span class="section-icon">🔐</span>
+                    <h2 style="margin: 0; border: none;">TLS Certificate Status</h2>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Host:Port</th>
+                                <th>Subject</th>
+                                <th>Issuer</th>
+                                <th>Valid From</th>
+                                <th>Valid Until</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for host_port, cert_data in tls_certificates.items() %}
+                            <tr>
+                                <td><code>{{ host_port }}</code></td>
+                                <td>{{ cert_data.subject }}</td>
+                                <td>{{ cert_data.issuer }}</td>
+                                <td>{{ cert_data.valid_from }}</td>
+                                <td>{{ cert_data.valid_until }}</td>
+                                <td>
+                                    {% if cert_data.status == 'valid' %}
+                                    <span class="cert-status valid">✓ Valid</span>
+                                    {% elif cert_data.status == 'expiring' %}
+                                    <span class="cert-status expiring">⚠ Expiring Soon</span>
+                                    {% elif cert_data.status == 'expired' %}
+                                    <span class="cert-status expired">✗ Expired</span>
+                                    {% else %}
+                                    <span class="cert-status unknown">? Unknown</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- EXTERNAL EXPOSURE DIFF -->
+            {% if external_exposure_diff %}
+            <div class="section">
+                <div class="section-title">
+                    <span class="section-icon">🌐</span>
+                    <h2 style="margin: 0; border: none;">External Exposure Differential</h2>
+                </div>
+
+                <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
+                    Services that are accessible from external networks or the public internet.
+                </p>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Port</th>
+                                <th>Internal</th>
+                                <th>External</th>
+                                <th>Risk Level</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for service_name, exposure_data in external_exposure_diff.items() %}
+                            <tr>
+                                <td>{{ service_name }}</td>
+                                <td><code>{{ exposure_data.port }}</code></td>
+                                <td>
+                                    {% if exposure_data.internal %}
+                                    <span class="exposure-indicator exposure-yes">Yes</span>
+                                    {% else %}
+                                    <span class="exposure-indicator exposure-no">No</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if exposure_data.external %}
+                                    <span class="badge badge-critical">PUBLIC</span>
+                                    {% else %}
+                                    <span class="badge badge-success">Private</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if exposure_data.external %}
+                                    <span class="badge badge-critical">CRITICAL</span>
+                                    {% else %}
+                                    <span class="badge badge-success">Low</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- RISK ASSESSMENT -->
+            {% if risk_summaries %}
+            <div class="section">
+                <div class="section-title">
+                    <span class="section-icon">📈</span>
+                    <h2 style="margin: 0; border: none;">Risk Assessment by Category</h2>
+                </div>
+
+                {% for risk in risk_summaries %}
+                <div class="subsection">
+                    <div class="subsection-title">{{ risk.category }}</div>
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; align-items: center;">
+                        <div>
+                            <div style="font-size: 3rem; font-weight: 700; color: {{ risk.risk_score|risk_level|lower == 'critical' and '#dc3545' or risk.risk_score|risk_level|lower == 'high' and '#fd7e14' or risk.risk_score|risk_level|lower == 'medium' and '#ffc107' or '#0d6efd' }};">
+                                {{ "%.1f"|format(risk.risk_score) }}/10
+                            </div>
+                            <div style="color: var(--text-secondary); margin-top: 0.5rem;">
+                                <strong>{{ risk.finding_count }}</strong> {{ "finding"|pluralize(risk.finding_count) }}
+                            </div>
+                        </div>
+                        <div>
+                            {% if risk.top_findings %}
+                            <div style="color: var(--text-secondary); font-size: 0.9rem;">Top Issues:</div>
+                            <ul style="margin: 0.75rem 0 0 1.25rem; padding: 0;">
+                                {% for finding_title in risk.top_findings[:3] %}
+                                <li style="margin-bottom: 0.5rem;">{{ finding_title }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- REMEDIATION CHECKLIST -->
+            {% if remediation_checklist %}
+            <div class="section">
+                <div class="section-title">
+                    <span class="section-icon">✅</span>
+                    <h2 style="margin: 0; border: none;">Remediation Checklist</h2>
+                </div>
+
+                {% for priority_group in remediation_checklist %}
+                <div class="subsection">
+                    <div class="subsection-title">
+                        <span class="severity-dot {{ priority_group.priority }}"></span>
+                        {{ priority_group.priority|capitalize }} Priority
+                    </div>
+
+                    <ul class="checklist">
+                        {% for item in priority_group.items %}
+                        <li class="checklist-item">
+                            <input type="checkbox" class="checklist-checkbox" id="item-{{ loop.index }}">
+                            <div class="checklist-content">
+                                <div class="checklist-title">{{ item.title }}</div>
+                                <div class="checklist-remediation">{{ item.remediation }}</div>
+                                <div class="checklist-meta">
+                                    <span>Affects: <strong>{{ item.count }}</strong> {{ "instance"|pluralize(item.count) }}</span>
+                                    {% if item.affected_hosts|length <= 3 %}
+                                    <span>Hosts: <code>{{ item.affected_hosts|join(', ') }}</code></span>
+                                    {% else %}
+                                    <span>Hosts: <code>{{ item.affected_hosts[:3]|join(', ') }}</code> +{{ item.affected_hosts|length - 3 }} more</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <p>
+            <strong>AegisScan Security Report</strong><br>
+            Generated on {{ generation_timestamp|format_timestamp }} • Scan ID: {{ scan_data.scan_id }}<br>
+            <small>This report contains confidential security assessment information. Handle with appropriate care.</small>
+        </p>
+    </div>
+</body>
+</html>

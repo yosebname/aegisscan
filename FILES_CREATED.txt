@@ -1,0 +1,318 @@
+AEGISSCAN IMPORTER AND EXTERNAL CONNECTORS - FILES CREATED
+===========================================================
+
+Created production-quality Python modules for Nmap import and external threat intelligence connectors.
+
+FILE STRUCTURE
+==============
+
+aegisscan/importer/
+  __init__.py                - Module exports (NmapImporter, result dataclasses)
+  nmap_importer.py           - Nmap XML parser and integration (650+ lines)
+
+aegisscan/external/
+  __init__.py                - Module exports (base class, connectors, result dataclasses)
+  base.py                    - ExternalIntelConnector abstract base class
+  shodan_connector.py        - Shodan API connector (500+ lines)
+  censys_connector.py        - Censys API connector (500+ lines)
+
+
+IMPORTER MODULE DETAILS
+=======================
+
+File: aegisscan/importer/nmap_importer.py
+
+Classes:
+- NmapScript(dataclass)
+  * id: str - Script identifier
+  * output: str - Script execution output
+
+- NmapPort(dataclass)
+  * port_id: int
+  * protocol: str (tcp/udp)
+  * state: str (open/closed/filtered)
+  * service_name: Optional[str]
+  * product: Optional[str]
+  * version: Optional[str]
+  * extra_info: Optional[str]
+  * scripts: List[NmapScript]
+  * to_dict() - Serialization method
+
+- NmapHost(dataclass)
+  * ip: str
+  * hostname: Optional[str]
+  * status: str (up/down)
+  * ports: List[NmapPort]
+  * os_matches: List[Dict] - OS detection candidates
+  * to_dict() - Serialization method
+
+- NmapScanResult(dataclass)
+  * scanner: str = "nmap"
+  * args: str - Command line arguments
+  * start_time: Optional[datetime]
+  * hosts: List[NmapHost]
+  * stats: Dict - Scan statistics
+  * to_dict() - Serialization method
+
+- NmapImporter(class)
+  * parse_file(filepath: str) -> NmapScanResult
+    - Parses Nmap XML file
+    - Validates file exists
+    - Handles XML parsing errors
+    - Returns complete scan result
+  
+  * parse_string(xml_string: str) -> NmapScanResult
+    - Parses XML from string
+    - Extracts metadata, hosts, stats
+    - Handles multiple Nmap versions
+    - Graceful degradation on missing fields
+  
+  * normalize_to_db(nmap_result, db_manager, scan_run_id)
+    - Converts Nmap format to internal DB schema
+    - Maps ports -> services
+    - Includes OS candidates and metadata
+    - Returns normalized dict for DB insertion
+  
+  * merge_with_scan(nmap_data, internal_scan_data, priority_rules)
+    - Merges new Nmap data with existing scans
+    - Priority rules: "newest", "nmap", "internal", "merge"
+    - Intelligent service merging
+    - Deduplication by IP and port
+    - Returns merged dataset
+
+Key Features:
+- XML parsing with xml.etree.ElementTree
+- Handles missing/partial data gracefully
+- Version-agnostic (supports different Nmap versions)
+- Comprehensive error logging
+- Dataclass serialization support
+- Smart merge logic with priority rules
+- Full type hints throughout
+
+
+EXTERNAL CONNECTORS MODULE DETAILS
+===================================
+
+File: aegisscan/external/base.py
+
+Class: ExternalIntelConnector(ABC)
+  * __init__(name: str, enabled: bool = False)
+  * async lookup_host(ip: str) -> Optional[Any]
+  * async lookup_multiple(ips: list[str]) -> list[Any]
+  * async health_check() -> bool
+  * __str__() -> str
+
+Plugin-style architecture:
+- All connectors inherit from this base
+- Gracefully skip if credentials missing (enabled=False)
+- Consistent interface across all Intel sources
+- Logging integration
+
+
+File: aegisscan/external/shodan_connector.py
+
+Class: ShodanHostResult(dataclass)
+  * ip: str
+  * ports: List[int]
+  * services: List[Dict]
+  * banners: List[Dict]
+  * vulns: List[str] - CVE identifiers
+  * last_update: Optional[datetime]
+  * org: Optional[str]
+  * isp: Optional[str]
+  * os: Optional[str]
+  * raw_data: Dict - Full API response
+  * to_dict() -> Dict
+
+Class: ShodanConnector(ExternalIntelConnector)
+  * __init__(api_key, cache_ttl=3600, rate_limit=1.0)
+  * async lookup_host(ip: str) -> Optional[ShodanHostResult]
+  * async lookup_multiple(ips: List[str]) -> List[ShodanHostResult]
+  * async health_check() -> bool
+  * clear_cache() -> None
+  * async close() -> None
+
+Features:
+- Dual backend support:
+  * Official shodan library (if available)
+  * REST API via aiohttp (fallback)
+- Rate limiting: 1 req/sec (configurable)
+- In-memory response caching with TTL
+- Automatic API key validation
+- Graceful disabled state if no credentials
+- Asyncio-native design
+- Comprehensive error handling:
+  * API errors logged, mode disabled
+  * Network timeouts with timeout handling
+  * Invalid IP validation
+  * HTTP status code interpretation
+- Banner and service parsing
+- Vulnerability extraction
+
+
+File: aegisscan/external/censys_connector.py
+
+Class: CensysService(dataclass)
+  * port: int
+  * protocol: str
+  * banner: Optional[str]
+  * timestamp: Optional[datetime]
+  * tls_cert_sha256: Optional[str]
+
+Class: CensysHostResult(dataclass)
+  * ip: str
+  * services: List[CensysService]
+  * tls_certs: List[Dict] - Certificate details
+  * autonomous_system: Optional[Dict] - AS info
+  * location: Optional[Dict] - Geographic data
+  * last_seen: Optional[datetime]
+  * raw_data: Dict - Full API response
+  * to_dict() -> Dict
+
+Class: CensysConnector(ExternalIntelConnector)
+  * __init__(api_id, api_secret, cache_ttl=3600, rate_limit=0.2)
+  * async lookup_host(ip: str) -> Optional[CensysHostResult]
+  * async lookup_multiple(ips: List[str]) -> List[CensysHostResult]
+  * async health_check() -> bool
+  * clear_cache() -> None
+  * async close() -> None
+
+Features:
+- Censys API v2 support
+- HTTP Basic authentication (API ID + Secret)
+- Rate limiting: 0.2s delay = 5 req/sec
+- Automatic backoff on rate limit (429)
+- In-memory response caching with TTL
+- TLS certificate extraction and parsing
+- Autonomous system information
+- Geographic location data
+- Service banner collection
+- Asyncio-native implementation
+- Full type hints and comprehensive logging
+- Graceful disabled state if no credentials
+
+
+CROSS-CUTTING FEATURES
+======================
+
+Error Handling:
+- FileNotFoundError for missing files
+- ET.ParseError for malformed XML
+- ValueError for invalid IPs
+- API authentication errors disable connector
+- Network timeouts with async.TimeoutError
+- Partial results on batch failures
+
+Rate Limiting:
+- Shodan: 1 req/sec (free tier, configurable)
+- Censys: 0.2s delay = 5 req/sec
+- Asyncio-based, non-blocking
+- Automatic backoff on API limits
+
+Caching:
+- In-memory dictionaries
+- TTL-based expiration
+- Manual clear_cache() method
+- Fast cache hit returns
+
+Async Design:
+- All I/O operations non-blocking
+- Context manager support (__aenter__/__aexit__)
+- asyncio.to_thread() for sync operations
+- Proper session management
+
+Type Hints:
+- Full type annotations throughout
+- Generic types (List, Dict, Optional)
+- Protocol-aware (TCP/UDP)
+- DateTime handling
+
+Logging:
+- Named loggers per module/component
+- Warning for unusual cases
+- Error for failures
+- Debug for diagnostic info
+- Includes timestamps and context
+
+
+USAGE EXAMPLES
+==============
+
+Nmap Import:
+```python
+from aegisscan.importer import NmapImporter
+
+importer = NmapImporter()
+result = importer.parse_file("/path/to/scan.xml")
+
+# Normalize to DB format
+normalized = importer.normalize_to_db(result, db_manager, "scan_123")
+
+# Merge with existing data
+merged = importer.merge_with_scan(
+    result,
+    existing_data,
+    priority_rules={"services": "merge", "os_info": "newest"}
+)
+```
+
+Shodan Lookup:
+```python
+from aegisscan.external import ShodanConnector
+
+async with ShodanConnector(api_key="xxx") as connector:
+    result = await connector.lookup_host("8.8.8.8")
+    if result:
+        print(f"Ports: {result.ports}")
+        print(f"Vulns: {result.vulns}")
+```
+
+Censys Lookup:
+```python
+from aegisscan.external import CensysConnector
+
+async with CensysConnector(api_id="xxx", api_secret="yyy") as connector:
+    results = await connector.lookup_multiple(["8.8.8.8", "1.1.1.1"])
+    for result in results:
+        print(f"{result.ip}: {len(result.services)} services")
+```
+
+
+PRODUCTION QUALITIES
+====================
+
+- 3-year developer level code
+- Comprehensive type hints
+- Full docstrings with Args/Returns/Raises
+- Error recovery and graceful degradation
+- Async/await for scalability
+- Caching for performance
+- Rate limiting for API compliance
+- Plugin architecture for extensibility
+- Dataclass models for clarity
+- Version-agnostic parsing
+- Extensive logging
+- Edge case handling:
+  * Missing fields in XML
+  * Partial scan data
+  * Different Nmap versions
+  * Invalid IP addresses
+  * API authentication failures
+  * Network timeouts
+  * Rate limit backoff
+  * Cache expiration
+
+
+NOTES
+=====
+
+- All imports are explicit and optional (aiohttp, shodan)
+- Falls back gracefully if libraries unavailable
+- No external dependencies required (uses stdlib)
+- Proper async context manager support
+- Thread-safe cache operations
+- Comprehensive error messages for debugging
+- Base class provides common interface
+- Configurable behavior (cache TTL, rate limits)
+- All dataclasses have to_dict() serialization
+

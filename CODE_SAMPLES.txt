@@ -1,0 +1,543 @@
+AegisScan - Code Sample Highlights
+===================================
+
+FILE: /sessions/loving-wonderful-mayer/mnt/ohreo/aegisscan/aegisscan/importer/nmap_importer.py
+
+SAMPLE 1: Parse Nmap XML File
+─────────────────────────────────────────────────────────────────────────────
+def parse_file(self, filepath: str) -> NmapScanResult:
+    """Parse an Nmap XML output file.
+    
+    Args:
+        filepath: Path to the Nmap XML file
+        
+    Returns:
+        NmapScanResult: Parsed scan results
+        
+    Raises:
+        FileNotFoundError: If file does not exist
+        ET.ParseError: If XML is malformed
+    """
+    path = Path(filepath)
+    if not path.exists():
+        raise FileNotFoundError(f"Nmap file not found: {filepath}")
+    
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            xml_content = f.read()
+        return self.parse_string(xml_content)
+    except ET.ParseError as e:
+        self.logger.error(f"Failed to parse Nmap XML file {filepath}: {e}")
+        raise
+
+
+SAMPLE 2: Parse XML String
+─────────────────────────────────────────────────────────────────────────────
+def parse_string(self, xml_string: str) -> NmapScanResult:
+    """Parse Nmap XML from string.
+    
+    Args:
+        xml_string: XML content as string
+        
+    Returns:
+        NmapScanResult: Parsed scan results
+    """
+    try:
+        root = ET.fromstring(xml_string)
+    except ET.ParseError as e:
+        self.logger.error(f"Failed to parse Nmap XML: {e}")
+        raise
+    
+    result = NmapScanResult()
+    
+    # Parse scan metadata
+    self._parse_metadata(root, result)
+    
+    # Parse hosts
+    for host_elem in root.findall(".//host"):
+        host = self._parse_host(host_elem)
+        if host:
+            result.hosts.append(host)
+    
+    # Parse statistics
+    self._parse_stats(root, result)
+    
+    return result
+
+
+SAMPLE 3: Normalize to Database Format
+─────────────────────────────────────────────────────────────────────────────
+def normalize_to_db(
+    self, nmap_result: NmapScanResult, db_manager: Any, scan_run_id: str
+) -> Dict[str, Any]:
+    """Convert Nmap results to internal database format.
+    
+    Args:
+        nmap_result: Parsed Nmap results
+        db_manager: Database manager instance for schema validation
+        scan_run_id: Identifier for this scan run
+        
+    Returns:
+        Dictionary in database schema format
+    """
+    normalized = {
+        "scan_run_id": scan_run_id,
+        "scanner": nmap_result.scanner,
+        "scanner_args": nmap_result.args,
+        "scan_timestamp": nmap_result.start_time.isoformat()
+            if nmap_result.start_time else None,
+        "statistics": nmap_result.stats,
+        "assets": [],
+    }
+    
+    for host in nmap_result.hosts:
+        asset = {
+            "ip_address": host.ip,
+            "hostname": host.hostname,
+            "host_status": host.status,
+            "discovered_services": [],
+            "os_candidates": [],
+            "last_scanned": nmap_result.start_time.isoformat()
+                if nmap_result.start_time else None,
+        }
+        
+        # Convert ports to services
+        for port in host.ports:
+            service = {
+                "port": port.port_id,
+                "protocol": port.protocol,
+                "state": port.state,
+                "service_name": port.service_name,
+                "product": port.product,
+                "version": port.version,
+                "extra_info": port.extra_info,
+                "scripts": [
+                    {"name": s.id, "output": s.output} for s in port.scripts
+                ],
+            }
+            asset["discovered_services"].append(service)
+        
+        normalized["assets"].append(asset)
+    
+    return normalized
+
+
+SAMPLE 4: Merge with Intelligent Priority Rules
+─────────────────────────────────────────────────────────────────────────────
+def merge_with_scan(
+    self,
+    nmap_data: NmapScanResult,
+    internal_scan_data: Dict[str, Any],
+    priority_rules: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Merge new Nmap data with existing internal scan data.
+    
+    Applies priority rules to determine which version of conflicting
+    information to keep.
+    """
+    if priority_rules is None:
+        priority_rules = {
+            "hostname": "merge",
+            "services": "merge",
+            "os_info": "newest",
+        }
+    
+    merged = internal_scan_data.copy()
+    
+    # Merge assets by IP
+    internal_assets_by_ip = {
+        asset["ip_address"]: asset for asset in merged.get("assets", [])
+    }
+    
+    for nmap_host in nmap_data.hosts:
+        ip = nmap_host.ip
+        if ip in internal_assets_by_ip:
+            internal_asset = internal_assets_by_ip[ip]
+            
+            # Merge hostname
+            if priority_rules.get("hostname") == "merge":
+                if nmap_host.hostname and nmap_host.hostname != internal_asset.get(
+                    "hostname"
+                ):
+                    if internal_asset.get("hostname"):
+                        hostnames = {internal_asset["hostname"]}
+                        hostnames.add(nmap_host.hostname)
+                        internal_asset["alternate_hostnames"] = list(hostnames)
+                    else:
+                        internal_asset["hostname"] = nmap_host.hostname
+            
+            # Merge services
+            if priority_rules.get("services") == "merge":
+                self._merge_services(internal_asset, nmap_host)
+        else:
+            # New host
+            new_asset = {
+                "ip_address": ip,
+                "hostname": nmap_host.hostname,
+                "host_status": nmap_host.status,
+                "discovered_services": [
+                    {
+                        "port": p.port_id,
+                        "protocol": p.protocol,
+                        "state": p.state,
+                        "service_name": p.service_name,
+                    }
+                    for p in nmap_host.ports
+                ],
+                "os_candidates": [
+                    {
+                        "name": os.get("name"),
+                        "accuracy": os.get("accuracy"),
+                    }
+                    for os in nmap_host.os_matches
+                ],
+            }
+            merged.setdefault("assets", []).append(new_asset)
+    
+    return merged
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FILE: /sessions/loving-wonderful-mayer/mnt/ohreo/aegisscan/aegisscan/external/shodan_connector.py
+
+SAMPLE 5: Shodan Connector Initialization
+─────────────────────────────────────────────────────────────────────────────
+class ShodanConnector(ExternalIntelConnector):
+    """Connector for Shodan threat intelligence API."""
+    
+    BASE_URL = "https://api.shodan.io"
+    FREE_TIER_RATE_LIMIT = 1.0  # 1 request per second
+    
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        cache_ttl: int = 3600,
+        rate_limit: float = FREE_TIER_RATE_LIMIT,
+    ):
+        """Initialize Shodan connector.
+        
+        Args:
+            api_key: Shodan API key (optional)
+            cache_ttl: Cache time-to-live in seconds
+            rate_limit: Delay between API requests in seconds
+        """
+        enabled = api_key is not None and len(api_key) > 0
+        super().__init__("shodan", enabled=enabled)
+        
+        self.api_key = api_key
+        self.cache_ttl = cache_ttl
+        self.rate_limit = rate_limit
+        self._cache: Dict[str, tuple[ShodanHostResult, float]] = {}
+        self._last_request_time = 0.0
+        self._session: Optional[aiohttp.ClientSession] = None
+        
+        if enabled and shodan:
+            self.logger.debug("Shodan library available")
+        elif enabled:
+            self.logger.debug("Using REST API fallback")
+
+
+SAMPLE 6: Async Host Lookup with Rate Limiting and Caching
+─────────────────────────────────────────────────────────────────────────────
+async def lookup_host(self, ip: str) -> Optional[ShodanHostResult]:
+    """Look up a single host on Shodan.
+    
+    Args:
+        ip: IP address to look up
+        
+    Returns:
+        ShodanHostResult or None if lookup fails
+    """
+    if not self.enabled:
+        self.logger.debug("Shodan connector disabled, skipping lookup")
+        return None
+    
+    if not self._is_valid_ip(ip):
+        raise ValueError(f"Invalid IP address: {ip}")
+    
+    # Check cache
+    cached = self._get_from_cache(ip)
+    if cached:
+        return cached
+    
+    # Apply rate limiting
+    await self._apply_rate_limit()
+    
+    result = None
+    if shodan:
+        result = await self._lookup_with_library(ip)
+    elif aiohttp:
+        result = await self._lookup_with_rest_api(ip)
+    else:
+        self.logger.error("Neither shodan library nor aiohttp available")
+    
+    if result:
+        self._cache[ip] = (result, time.time())
+    
+    return result
+
+
+SAMPLE 7: Dual Backend Support - Library vs REST API
+─────────────────────────────────────────────────────────────────────────────
+async def _lookup_with_library(self, ip: str) -> Optional[ShodanHostResult]:
+    """Look up host using official shodan library."""
+    try:
+        api = shodan.Shodan(self.api_key)
+        data = await asyncio.to_thread(api.host, ip)
+        return self._parse_library_response(ip, data)
+    except shodan.APIError as e:
+        self.logger.error(f"Shodan API error for {ip}: {e}")
+        if "invalid API key" in str(e).lower():
+            self.enabled = False
+        return None
+
+
+async def _lookup_with_rest_api(self, ip: str) -> Optional[ShodanHostResult]:
+    """Look up host using Shodan REST API via aiohttp."""
+    if not self._session:
+        self._session = aiohttp.ClientSession()
+    
+    try:
+        async with self._session.get(
+            f"{self.BASE_URL}/shodan/host/{ip}",
+            params={"key": self.api_key},
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return self._parse_rest_response(ip, data)
+            elif resp.status == 401:
+                self.logger.error("Invalid Shodan API key")
+                self.enabled = False
+                return None
+            elif resp.status == 404:
+                self.logger.debug(f"IP {ip} not found in Shodan")
+                return None
+            else:
+                self.logger.warning(f"Shodan API returned {resp.status}")
+                return None
+    except asyncio.TimeoutError:
+        self.logger.error(f"Shodan API timeout for {ip}")
+        return None
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FILE: /sessions/loving-wonderful-mayer/mnt/ohreo/aegisscan/aegisscan/external/censys_connector.py
+
+SAMPLE 8: Censys Connector with HTTP Basic Auth
+─────────────────────────────────────────────────────────────────────────────
+class CensysConnector(ExternalIntelConnector):
+    """Connector for Censys threat intelligence API v2."""
+    
+    BASE_URL = "https://api.censys.io/v2"
+    RATE_LIMIT = 0.2  # 5 requests per second
+    
+    def __init__(
+        self,
+        api_id: Optional[str] = None,
+        api_secret: Optional[str] = None,
+        cache_ttl: int = 3600,
+        rate_limit: float = RATE_LIMIT,
+    ):
+        """Initialize Censys connector.
+        
+        Args:
+            api_id: Censys API ID (optional)
+            api_secret: Censys API secret (optional)
+            cache_ttl: Cache time-to-live in seconds
+            rate_limit: Delay between API requests in seconds
+        """
+        enabled = (
+            api_id is not None
+            and api_secret is not None
+            and len(api_id) > 0
+            and len(api_secret) > 0
+        )
+        super().__init__("censys", enabled=enabled)
+        
+        self.api_id = api_id
+        self.api_secret = api_secret
+        self.cache_ttl = cache_ttl
+        self.rate_limit = rate_limit
+        self._cache: Dict[str, tuple[CensysHostResult, float]] = {}
+        self._auth_header = self._create_auth_header() if enabled else None
+
+
+SAMPLE 9: Rate Limiting with Automatic Backoff
+─────────────────────────────────────────────────────────────────────────────
+async def _lookup_host_api(self, ip: str) -> Optional[CensysHostResult]:
+    """Look up host via Censys API v2."""
+    
+    await self._apply_rate_limit()
+    
+    try:
+        async with self._session.get(
+            f"{self.BASE_URL}/hosts/{ip}",
+            headers={"Authorization": self._auth_header},
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return self._parse_response(ip, data)
+            elif resp.status == 401:
+                self.logger.error("Invalid Censys API credentials")
+                self.enabled = False
+                return None
+            elif resp.status == 404:
+                self.logger.debug(f"IP {ip} not found in Censys")
+                return None
+            elif resp.status == 429:
+                self.logger.warning(f"Censys rate limit exceeded for {ip}")
+                # Back off rate limiting
+                self.rate_limit *= 1.5
+                return None
+            else:
+                self.logger.warning(f"Censys API returned {resp.status}")
+                return None
+    except asyncio.TimeoutError:
+        self.logger.error(f"Censys API timeout for {ip}")
+        return None
+
+
+SAMPLE 10: HTTP Basic Auth Header Creation
+─────────────────────────────────────────────────────────────────────────────
+def _create_auth_header(self) -> str:
+    """Create HTTP Basic auth header for Censys API.
+    
+    Returns:
+        Authorization header value
+    """
+    if not self.api_id or not self.api_secret:
+        return ""
+    
+    credentials = f"{self.api_id}:{self.api_secret}"
+    encoded = b64encode(credentials.encode()).decode()
+    return f"Basic {encoded}"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+FILE: /sessions/loving-wonderful-mayer/mnt/ohreo/aegisscan/aegisscan/external/base.py
+
+SAMPLE 11: Abstract Base Class for Plugin Architecture
+─────────────────────────────────────────────────────────────────────────────
+class ExternalIntelConnector(ABC):
+    """Abstract base class for external intelligence data sources.
+    
+    All external connectors should inherit from this class and implement
+    the required methods. Connectors are plugin-style and should gracefully
+    handle missing credentials.
+    """
+    
+    def __init__(self, name: str, enabled: bool = False):
+        """Initialize connector.
+        
+        Args:
+            name: Connector name (e.g., 'shodan', 'censys')
+            enabled: Whether connector is operational with valid credentials
+        """
+        self.name = name
+        self.enabled = enabled
+        self.logger = logging.getLogger(f"{__name__}.{name}")
+    
+    @abstractmethod
+    async def lookup_host(self, ip: str) -> Optional[Any]:
+        """Look up intelligence for a single host."""
+        pass
+    
+    @abstractmethod
+    async def lookup_multiple(self, ips: list[str]) -> list[Any]:
+        """Look up intelligence for multiple hosts."""
+        pass
+    
+    async def health_check(self) -> bool:
+        """Check if connector is healthy and operational."""
+        return self.enabled
+    
+    def __str__(self) -> str:
+        """Return string representation."""
+        return f"{self.name} (enabled={self.enabled})"
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+DATACLASS EXAMPLES
+
+SAMPLE 12: Nmap Data Structure
+─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class NmapScript:
+    id: str
+    output: str
+
+@dataclass
+class NmapPort:
+    port_id: int
+    protocol: str
+    state: str
+    service_name: Optional[str] = None
+    product: Optional[str] = None
+    version: Optional[str] = None
+    extra_info: Optional[str] = None
+    scripts: List[NmapScript] = field(default_factory=list)
+
+@dataclass
+class NmapHost:
+    ip: str
+    hostname: Optional[str] = None
+    status: str = "unknown"
+    ports: List[NmapPort] = field(default_factory=list)
+    os_matches: List[Dict[str, Any]] = field(default_factory=list)
+
+@dataclass
+class NmapScanResult:
+    scanner: str = "nmap"
+    args: str = ""
+    start_time: Optional[datetime] = None
+    hosts: List[NmapHost] = field(default_factory=list)
+    stats: Dict[str, Any] = field(default_factory=dict)
+
+
+SAMPLE 13: Shodan Result Structure
+─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class ShodanHostResult:
+    """Result of a Shodan host lookup."""
+    
+    ip: str
+    ports: List[int] = field(default_factory=list)
+    services: List[Dict[str, Any]] = field(default_factory=list)
+    banners: List[Dict[str, Any]] = field(default_factory=list)
+    vulns: List[str] = field(default_factory=list)
+    last_update: Optional[datetime] = None
+    org: Optional[str] = None
+    isp: Optional[str] = None
+    os: Optional[str] = None
+    raw_data: Dict[str, Any] = field(default_factory=dict)
+
+
+SAMPLE 14: Censys Result Structure
+─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class CensysService:
+    """Represents a service discovered by Censys."""
+    port: int
+    protocol: str
+    banner: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    tls_cert_sha256: Optional[str] = None
+
+@dataclass
+class CensysHostResult:
+    """Result of a Censys host lookup."""
+    ip: str
+    services: List[CensysService] = field(default_factory=list)
+    tls_certs: List[Dict[str, Any]] = field(default_factory=list)
+    autonomous_system: Optional[Dict[str, Any]] = None
+    location: Optional[Dict[str, Any]] = None
+    last_seen: Optional[datetime] = None
+    raw_data: Dict[str, Any] = field(default_factory=dict)
+
+═══════════════════════════════════════════════════════════════════════════════
