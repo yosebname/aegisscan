@@ -116,16 +116,21 @@ async def run_enrichment(
     open_host_ports: List[tuple],
     banner_timeout: float = 3.0,
     tls_timeout: float = 5.0,
-) -> None:
-    """open_host_ports: [(host_ip, port), ...]"""
+    on_enrich=None,
+    on_progress=None,
+) -> int:
+    """open_host_ports: [(host_ip, port), ...]. 반환: 수집 건수."""
     banner_grabber = BannerGrabber(timeout=banner_timeout)
     tls_inspector = TLSInspector(timeout=tls_timeout)
-    for host_ip, port in open_host_ports:
+    count = 0
+    total = len(open_host_ports)
+    for idx, (host_ip, port) in enumerate(open_host_ports):
+        if on_progress:
+            on_progress(idx + 1, total, "Enriching")
         host_r = await session.execute(select(Host).where(Host.ip == host_ip))
         host = host_r.scalar_one_or_none()
         if not host:
             continue
-        # Banner
         banner_result = await banner_grabber.grab(host_ip, port)
         if banner_result:
             parsed = json.dumps(banner_result.parsed_fields) if banner_result.parsed_fields else None
@@ -135,7 +140,10 @@ async def run_enrichment(
                 svc = sr.scalar_one_or_none()
                 if not svc:
                     session.add(Service(host_id=host.id, port=port, detected_service=banner_result.service_hint, confidence=0.8))
-        # TLS for common HTTPS ports
+            detail = banner_result.raw_banner.split("\n")[0][:60] if banner_result.raw_banner else ""
+            if on_enrich:
+                on_enrich(host_ip, port, "Banner", f"{banner_result.service_hint or 'tcp'} — {detail}")
+            count += 1
         if port in (443, 8443, 9443):
             tls_info = await tls_inspector.inspect(host_ip, port, sni=host_ip)
             if tls_info:
@@ -152,7 +160,12 @@ async def run_enrichment(
                     fingerprint_sha256=tls_info.fingerprint_sha256,
                     signature_algorithm=tls_info.signature_algorithm,
                 ))
+                subj = tls_info.subject or "unknown"
+                if on_enrich:
+                    on_enrich(host_ip, port, "TLS", f"subject={subj[:40]} expires={tls_info.not_after}")
+                count += 1
         await session.flush()
+    return count
 
 
 class ScanRunner:
@@ -165,12 +178,30 @@ class ScanRunner:
         retries: int = 2,
         rate_per_sec: Optional[float] = None,
         do_enrichment: bool = True,
+        on_progress=None,
+        on_phase=None,
+        on_enrich=None,
     ):
         self.session = session
         self.timeout = timeout
         self.retries = retries
         self.rate_per_sec = rate_per_sec
         self.do_enrichment = do_enrichment
+        self._on_progress = on_progress  # (current, total, label)
+        self._on_phase = on_phase        # (phase_name)
+        self._on_enrich = on_enrich      # (host, port, kind, detail)
+
+    def _notify_progress(self, current, total, label="Scanning"):
+        if self._on_progress:
+            self._on_progress(current, total, label)
+
+    def _notify_phase(self, phase):
+        if self._on_phase:
+            self._on_phase(phase)
+
+    def _notify_enrich(self, host, port, kind, detail):
+        if self._on_enrich:
+            self._on_enrich(host, port, kind, detail)
 
     async def run(
         self,
@@ -194,15 +225,18 @@ class ScanRunner:
         syn_summary: Optional[SynScanSummary] = None
 
         if run_connect:
+            self._notify_phase("connect_scan")
             scanner = ConnectScanner(timeout=self.timeout, retries=self.retries, rate_per_sec=self.rate_per_sec)
             connect_summary = await scanner.scan(targets=targets, ports=ports)
             await save_connect_results(self.session, scan_run_id, connect_summary)
 
         if run_syn and SynScanner.is_available():
+            self._notify_phase("syn_scan")
             syn_scanner = SynScanner(timeout=self.timeout, rate_per_sec=self.rate_per_sec)
             syn_summary = await syn_scanner.scan(targets=targets, ports=ports)
             await save_syn_results(self.session, scan_run_id, syn_summary)
 
+        mismatches = []
         if connect_summary and syn_summary:
             mismatches = compare_connect_syn(connect_summary.results, syn_summary.results)
             for m in mismatches:
@@ -224,14 +258,25 @@ class ScanRunner:
                 if r.state == "open":
                     open_host_ports.append((r.host, r.port))
 
+        enriched_count = 0
         if self.do_enrichment and open_host_ports:
-            await run_enrichment(
+            self._notify_phase("enrichment")
+            enriched_count = await run_enrichment(
                 self.session,
                 open_host_ports[:200],
                 banner_timeout=self.timeout,
                 tls_timeout=5.0,
+                on_enrich=self._on_enrich,
+                on_progress=self._on_progress,
             )
 
         scan_run.end_time = datetime.utcnow()
         await self.session.flush()
+
+        self._scan_result = {
+            "connect_summary": connect_summary,
+            "syn_summary": syn_summary,
+            "mismatches": len(mismatches),
+            "enriched_count": enriched_count,
+        }
         return scan_run_id

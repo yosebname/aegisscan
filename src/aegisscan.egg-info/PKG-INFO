@@ -22,6 +22,7 @@ Requires-Dist: uvicorn[standard]>=0.27.0
 Requires-Dist: jinja2>=3.1.0
 Requires-Dist: pydantic>=2.5.0
 Requires-Dist: pydantic-settings>=2.1.0
+Requires-Dist: greenlet>=3.0.0
 Requires-Dist: sqlalchemy>=2.0.0
 Requires-Dist: scapy>=2.5.0
 Requires-Dist: httpx>=0.26.0
@@ -53,10 +54,10 @@ Dynamic: requires-python
 
 ```bash
 cd aegisscan
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
-# 또는
-pip install -r requirements.txt
-# 패키지로 실행하려면: pip install -e . 후 aegisscan 명령 사용
+# greenlet이 SQLAlchemy 비동기 세션에 필요하므로 함께 설치됨
 ```
 
 ## 빠른 시작
