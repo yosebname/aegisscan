@@ -7,7 +7,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from ..data.models import Host, Port, ScanRun, Service, Banner, TLSCert, DiffFinding
+from ..data.models import Host, Port, ScanRun, Service, Banner, TLSCert, DiffFinding, Vulnerability, WebFinding
 
 
 def _make_session(db_url: str):
@@ -56,6 +56,25 @@ async def _fetch_report_data(
             .order_by(func.count(Port.id).desc())
             .limit(20)
         )
+        vulns_r = await session.execute(
+            select(Vulnerability, Host.ip)
+            .join(Host, Vulnerability.host_id == Host.id)
+            .order_by(Vulnerability.epss_score.desc().nullslast())
+            .limit(50)
+        )
+        vuln_count_r = await session.execute(select(func.count(Vulnerability.id)))
+        vuln_critical_r = await session.execute(
+            select(func.count(Vulnerability.id)).where(
+                Vulnerability.severity.in_(["critical", "high"])
+            )
+        )
+        web_findings_r = await session.execute(
+            select(WebFinding, Host.ip)
+            .join(Host, WebFinding.host_id == Host.id)
+            .order_by(WebFinding.severity.desc(), WebFinding.id.desc())
+            .limit(50)
+        )
+        web_count_r = await session.execute(select(func.count(WebFinding.id)))
         data = {
             "scan_run_id": scan_run_id,
             "total_hosts": hosts_r.scalar() or 0,
@@ -73,7 +92,28 @@ async def _fetch_report_data(
                 {"host_ip": ip, "port": t.port, "not_after": str(t.not_after) if t.not_after else None}
                 for t, ip in tls_r.all()
             ],
-            "top_ports": [{"port": p, "count": c} for p, c in top_ports_r.all()],
+            "top_ports": [{"port": p, "count": cnt} for p, cnt in top_ports_r.all()],
+            "vulnerabilities": [
+                {
+                    "host_ip": ip, "port": v.port, "cve_id": v.cve_id,
+                    "epss_score": v.epss_score, "epss_percentile": v.epss_percentile,
+                    "severity": v.severity, "source": v.source,
+                }
+                for v, ip in vulns_r.all()
+            ],
+            "vuln_total": vuln_count_r.scalar() or 0,
+            "vuln_critical_high": vuln_critical_r.scalar() or 0,
+            "web_findings": [
+                {
+                    "host_ip": ip, "port": wf.port,
+                    "finding_type": wf.finding_type, "severity": wf.severity,
+                    "url": wf.url, "evidence": wf.evidence,
+                    "screenshot_path": wf.screenshot_path,
+                    "matched_pattern": wf.matched_pattern,
+                }
+                for wf, ip in web_findings_r.all()
+            ],
+            "web_findings_count": web_count_r.scalar() or 0,
             "generated_at": datetime.utcnow().isoformat(),
         }
     await engine.dispose()

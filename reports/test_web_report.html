@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>AegisScan Report</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 960px; margin: 0 auto; padding: 1.5rem; color: #1a1a1a; }
+    h1 { border-bottom: 2px solid #333; }
+    h2 { margin-top: 2rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { padding: 0.5rem 0.75rem; border: 1px solid #ddd; text-align: left; }
+    th { background: #f5f5f5; }
+    .summary { background: #e8f4fd; padding: 1rem; border-radius: 6px; margin: 1rem 0; }
+    .critical { color: #fff; background: #991b1b; padding: 2px 6px; border-radius: 3px; font-weight: bold; }
+    .high { color: #b91c1c; font-weight: bold; }
+    .medium { color: #b45309; }
+    .low { color: #15803d; }
+    .meta { color: #666; font-size: 0.9rem; }
+    .epss-bar { display: inline-block; height: 14px; background: #3b82f6; border-radius: 2px; vertical-align: middle; }
+    .epss-bar-bg { display: inline-block; width: 120px; height: 14px; background: #e5e7eb; border-radius: 2px; vertical-align: middle; }
+    .cve-link { color: #2563eb; text-decoration: none; }
+    .cve-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>AegisScan 리포트</h1>
+  <p class="meta">생성 시각: 2026-03-14T15:42:35.165086</p>
+
+  <div class="summary">
+    <h2>Executive Summary</h2>
+    <ul>
+      <li>총 호스트 수: <strong>255</strong></li>
+      <li>열린 포트 수: <strong>3</strong></li>
+      <li>차이/발견 수 (Connect vs SYN, 외부 노출 등): <strong>0</strong></li>
+      <li>발견된 CVE 수: <strong>0</strong>
+        
+      </li>
+      <li>웹 보안 발견: <strong class="high">2</strong> (관리자 노출/정보누출/디렉터리 리스팅)</li>
+    </ul>
+  </div>
+
+  <h2>High Risk Findings</h2>
+  <table>
+    <thead><tr><th>유형</th><th>심각도</th><th>요약</th></tr></thead>
+    <tbody>
+      
+      <tr><td colspan="3">없음</td></tr>
+      
+    </tbody>
+  </table>
+
+  
+
+  
+  <h2>웹 보안 분석 (총 2건)</h2>
+  <p class="meta">관리자 페이지 노출 / 서버 정보 누출 / 디렉터리 리스팅 탐지 결과</p>
+  <table>
+    <thead>
+      <tr><th>유형</th><th>호스트</th><th>포트</th><th>심각도</th><th>URL</th><th>근거</th><th>스크린샷</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr>
+        <td>
+          💬 정보 누출
+          
+        </td>
+        <td>127.0.0.1</td>
+        <td>8080</td>
+        <td class="medium">medium</td>
+        <td style="font-size:0.85rem; word-break:break-all;">http://127.0.0.1:8080//index.html</td>
+        <td style="font-size:0.85rem;">nginx/1.29.5; server: nginx/1.29.5</td>
+        <td>
+          
+          <a href="screenshots/127.0.0.1_8080_infoleak_index.html_1773502937.png" target="_blank">📸 보기</a>
+          
+        </td>
+      </tr>
+      
+      <tr>
+        <td>
+          💬 정보 누출
+          
+        </td>
+        <td>127.0.0.1</td>
+        <td>8080</td>
+        <td class="medium">medium</td>
+        <td style="font-size:0.85rem; word-break:break-all;">http://127.0.0.1:8080//</td>
+        <td style="font-size:0.85rem;">nginx/1.29.5; server: nginx/1.29.5</td>
+        <td>
+          
+          <a href="screenshots/127.0.0.1_8080_infoleak_root_1773502937.png" target="_blank">📸 보기</a>
+          
+        </td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+
+  <h2>열린 포트 Top</h2>
+  <table>
+    <thead><tr><th>포트</th><th>건수</th></tr></thead>
+    <tbody>
+      
+      <tr><td>9091</td><td>1</td></tr>
+      
+      <tr><td>9090</td><td>1</td></tr>
+      
+      <tr><td>8080</td><td>1</td></tr>
+      
+    </tbody>
+  </table>
+
+  <h2>TLS 인증서 (수집 항목)</h2>
+  <table>
+    <thead><tr><th>호스트</th><th>포트</th><th>만료일</th></tr></thead>
+    <tbody>
+      
+      <tr><td colspan="3">없음</td></tr>
+      
+    </tbody>
+  </table>
+
+  <h2>Remediation Checklist</h2>
+  <ul>
+    <li>외부에만 노출된 포트(Shadow exposure): 방화벽/보안그룹에서 차단 검토</li>
+    <li>Connect vs SYN 불일치: 필터링 장비/방화벽 정책 확인</li>
+    <li>TLS 만료 임박: 인증서 갱신</li>
+    <li>관리 포트(22, 3389 등) 외부 노출: VPN/점프호스트로 제한</li>
+    
+    
+    <li><strong>관리자 페이지 노출</strong>: 외부 접근 차단, IP 화이트리스트 또는 VPN 뒤로 이동</li>
+    <li><strong>서버 정보 누출</strong>: Server/X-Powered-By 헤더 제거, 에러 페이지에서 스택 트레이스 숨김</li>
+    <li><strong>디렉터리 리스팅</strong>: 웹 서버 설정에서 autoindex/Options Indexes 비활성화</li>
+    
+  </ul>
+
+  <p class="meta">— AegisScan</p>
+</body>
+</html>

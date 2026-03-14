@@ -1,6 +1,6 @@
 """외부 관측 플러그인 베이스."""
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 
@@ -12,6 +12,7 @@ class ExternalObservationRecord:
     service: Optional[str] = None
     banner: Optional[str] = None
     raw_data: Optional[dict] = None
+    vulns: List[str] = field(default_factory=list)
 
 
 class ExternalConnector(ABC):

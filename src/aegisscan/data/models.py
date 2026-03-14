@@ -55,6 +55,12 @@ class Host(Base):
     external_observations: Mapped[list["ExternalObservation"]] = relationship(
         "ExternalObservation", back_populates="host", cascade="all, delete-orphan"
     )
+    vulnerabilities: Mapped[list["Vulnerability"]] = relationship(
+        "Vulnerability", back_populates="host", cascade="all, delete-orphan"
+    )
+    web_findings: Mapped[list["WebFinding"]] = relationship(
+        "WebFinding", back_populates="host", cascade="all, delete-orphan"
+    )
 
 
 class Port(Base):
@@ -173,3 +179,43 @@ class DiffFinding(Base):
     port: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     scan_run: Mapped[Optional["ScanRun"]] = relationship("ScanRun", back_populates="diff_findings")
+
+
+class Vulnerability(Base):
+    __tablename__ = "vulnerabilities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    host_id: Mapped[int] = mapped_column(ForeignKey("hosts.id"), index=True)
+    port: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cve_id: Mapped[str] = mapped_column(String(32), index=True)
+    source: Mapped[str] = mapped_column(String(32), default="shodan")
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cvss_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    epss_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    epss_percentile: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    severity: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    discovered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)
+
+    host: Mapped["Host"] = relationship("Host", back_populates="vulnerabilities")
+
+    __table_args__ = (Index("ix_vulns_host_cve", "host_id", "cve_id", unique=True),)
+
+
+class WebFinding(Base):
+    __tablename__ = "web_findings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    host_id: Mapped[int] = mapped_column(ForeignKey("hosts.id"), index=True)
+    port: Mapped[int] = mapped_column(Integer)
+    finding_type: Mapped[str] = mapped_column(String(64))
+    severity: Mapped[str] = mapped_column(String(16), default="medium")
+    url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    matched_pattern: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    screenshot_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    scan_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("scan_runs.id"), nullable=True, index=True)
+    discovered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow)
+
+    host: Mapped["Host"] = relationship("Host", back_populates="web_findings")
+
+    __table_args__ = (Index("ix_web_findings_host_port_type", "host_id", "port", "finding_type"),)

@@ -147,3 +147,106 @@ def print_summary(
 def print_enrichment_detail(host: str, port: int, kind: str, detail: str):
     kind_c = C.MAGENTA if kind == "TLS" else C.BLUE
     print(f"    {c('▸', kind_c)} {host}:{port} [{c(kind, kind_c)}] {detail}")
+
+
+def print_cve_table(cve_list: list, max_rows: int = 40):
+    """CVE/EPSS 결과 테이블 출력. 각 항목은 dict(cve_id, ip, port, epss_score, percentile, severity)."""
+    if not cve_list:
+        info("CVE가 발견되지 않았습니다.")
+        return
+
+    sorted_cves = sorted(cve_list, key=lambda x: x.get("epss_score", 0) or 0, reverse=True)
+    display = sorted_cves[:max_rows]
+
+    header("CVE / EPSS Analysis")
+    hdr_line = f"  {'CVE ID':<20} {'HOST':<18} {'PORT':<7} {'EPSS':<10} {'PERCENTILE':<12} {'SEVERITY':<10}"
+    print(c(hdr_line, C.BOLD + C.WHITE))
+    print(c("  " + "─" * 78, C.DIM))
+
+    for item in display:
+        sev = item.get("severity", "?")
+        sev_color = {
+            "critical": C.RED + C.BOLD,
+            "high": C.RED,
+            "medium": C.YELLOW,
+            "low": C.GREEN,
+        }.get(sev, C.DIM)
+
+        epss = item.get("epss_score")
+        epss_str = f"{epss:.4f}" if epss is not None else "-"
+        pct = item.get("percentile")
+        pct_str = f"{pct:.1%}" if pct is not None else "-"
+
+        print(
+            f"  {c(item.get('cve_id', '?'), C.CYAN):<30} "
+            f"{item.get('ip', '?'):<18} "
+            f"{str(item.get('port', '?')):<7} "
+            f"{epss_str:<10} "
+            f"{pct_str:<12} "
+            f"{c(sev, sev_color)}"
+        )
+
+    if len(sorted_cves) > max_rows:
+        info(f"... 외 {len(sorted_cves) - max_rows}건 생략")
+
+
+def print_cve_summary(cve_count: int, epss_queried: int, high_count: int):
+    """CVE/EPSS 요약 출력."""
+    header("CVE/EPSS Summary")
+    print(f"  Unique CVEs found : {c(str(cve_count), C.BOLD)}")
+    print(f"  EPSS scores fetched: {c(str(epss_queried), C.BOLD)}")
+    if high_count:
+        print(f"  High EPSS (≥0.1)  : {c(str(high_count), C.RED + C.BOLD)}")
+    else:
+        print(f"  High EPSS (≥0.1)  : {c('0', C.GREEN)}")
+    print()
+
+
+def print_web_findings_table(findings: list, max_rows: int = 30):
+    """웹 보안 분석 결과 테이블. 각 항목은 dict(finding_type, host, port, url, evidence, severity, screenshot_path)."""
+    if not findings:
+        return
+
+    header("Web Security Findings")
+    type_labels = {
+        "admin_exposure": "Admin Page",
+        "info_leak": "Info Leak",
+        "dir_listing": "Dir Listing",
+    }
+    hdr_line = f"  {'TYPE':<14} {'HOST:PORT':<22} {'SEVERITY':<10} {'EVIDENCE':<40} {'SCREENSHOT'}"
+    print(c(hdr_line, C.BOLD + C.WHITE))
+    print(c("  " + "─" * 95, C.DIM))
+
+    display = findings[:max_rows]
+    for f in display:
+        sev = f.get("severity", "medium")
+        sev_color = {"high": C.RED + C.BOLD, "critical": C.RED + C.BOLD, "medium": C.YELLOW, "low": C.GREEN}.get(sev, C.DIM)
+        type_label = type_labels.get(f.get("finding_type", ""), f.get("finding_type", "?"))
+        type_color = {
+            "admin_exposure": C.RED,
+            "info_leak": C.YELLOW,
+            "dir_listing": C.MAGENTA,
+        }.get(f.get("finding_type", ""), C.WHITE)
+        hp = f"{f.get('host', '?')}:{f.get('port', '?')}"
+        ev = (f.get("evidence", "") or "")[:40]
+        ss = c("✓ captured", C.GREEN) if f.get("screenshot_path") else c("—", C.DIM)
+        print(
+            f"  {c(type_label, type_color):<24} {hp:<22} {c(sev, sev_color):<20} {ev:<40} {ss}"
+        )
+
+    if len(findings) > max_rows:
+        info(f"... 외 {len(findings) - max_rows}건 생략")
+
+
+def print_web_findings_summary(total: int, screenshots: int, by_type: Optional[dict] = None):
+    """웹 보안 분석 요약."""
+    if total == 0:
+        return
+    header("Web Security Summary")
+    print(f"  Total findings   : {c(str(total), C.RED + C.BOLD)}")
+    print(f"  Screenshots      : {c(str(screenshots), C.CYAN)}")
+    if by_type:
+        for t, cnt in by_type.items():
+            label = {"admin_exposure": "Admin Page", "info_leak": "Info Leak", "dir_listing": "Dir Listing"}.get(t, t)
+            print(f"    {label:<16}: {c(str(cnt), C.BOLD)}")
+    print()

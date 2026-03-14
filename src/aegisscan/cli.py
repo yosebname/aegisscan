@@ -13,6 +13,8 @@ from aegisscan.console import (
     print_banner, info, warn, error, success, header,
     progress_bar, print_scan_config, print_results_table,
     print_summary, print_enrichment_detail, c, C,
+    print_cve_table, print_cve_summary,
+    print_web_findings_table, print_web_findings_summary,
 )
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -43,6 +45,7 @@ def cmd_scan(args):
             "connect_scan": "Initiating Connect scan...",
             "syn_scan": "Initiating SYN scan...",
             "enrichment": "Enriching open ports (Banner/TLS)...",
+            "web_analysis": "Web Security Analysis (Admin/InfoLeak/DirList)...",
         }
         header(labels.get(phase, phase))
 
@@ -80,9 +83,20 @@ def cmd_scan(args):
             syn_summary = result_info.get("syn_summary")
             mismatches = result_info.get("mismatches", 0)
             enriched_count = result_info.get("enriched_count", 0)
+            web_findings = result_info.get("web_findings", [])
 
             if connect_summary:
                 print_results_table(connect_summary.results)
+
+            if web_findings:
+                print_web_findings_table(web_findings)
+                by_type = {}
+                ss_count = 0
+                for wf in web_findings:
+                    by_type[wf["finding_type"]] = by_type.get(wf["finding_type"], 0) + 1
+                    if wf.get("screenshot_path"):
+                        ss_count += 1
+                print_web_findings_summary(len(web_findings), ss_count, by_type)
 
             summary = connect_summary or syn_summary
             if summary:
@@ -154,11 +168,13 @@ def cmd_import_nmap(args):
 
 
 def cmd_external(args):
-    from aegisscan.service.external_compare import run_external_compare
+    from aegisscan.service.external_compare import run_external_compare_with_cve
     from aegisscan.external.shodan_connector import ShodanConnector
     from aegisscan.external.censys_connector import CensysConnector
 
     print_banner()
+
+    skip_epss = getattr(args, "no_epss", False)
 
     async def _run():
         await init_db(get_settings().database_url)
@@ -174,11 +190,29 @@ def cmd_external(args):
             warn("호스트가 없습니다. 먼저 스캔을 실행하세요.")
             return 0
         info(f"호스트 {c(str(len(ips)), C.BOLD)}개 대상 외부 조회 ({args.source})")
+        if not skip_epss:
+            info("CVE 추출 + EPSS 점수 조회 활성화")
+
         connector = ShodanConnector() if args.source == "shodan" else CensysConnector()
         async with factory() as session:
-            n = await run_external_compare(session, connector, ips, scan_run_id=None)
+            result = await run_external_compare_with_cve(
+                session, connector, ips,
+                scan_run_id=None,
+                fetch_epss=not skip_epss,
+                on_progress=lambda cur, tot, label: progress_bar(cur, tot, label),
+            )
             await session.commit()
-        success(f"외부 비교 완료. DiffFinding {c(str(n), C.BOLD)} 건")
+
+        success("외부 비교 완료!")
+        info(f"DiffFinding: {c(str(result.diff_count), C.BOLD)} 건")
+
+        if result.cve_count > 0:
+            print_cve_summary(result.cve_count, result.epss_queried, len(result.high_epss_cves))
+            if result.high_epss_cves:
+                print_cve_table(result.high_epss_cves)
+        else:
+            info("CVE 정보가 발견되지 않았습니다.")
+
         return 0
 
     return asyncio.run(_run())
@@ -289,9 +323,10 @@ Examples:
     p_imp.add_argument("file", type=Path, help="Nmap XML 파일 경로")
     p_imp.set_defaults(func=cmd_import_nmap)
 
-    p_ext = sub.add_parser("external", help="외부 관측 비교 (Shodan/Censys)")
+    p_ext = sub.add_parser("external", help="외부 관측 비교 (Shodan/Censys) + CVE/EPSS 분석")
     p_ext.add_argument("--source", choices=["shodan", "censys"], required=True)
     p_ext.add_argument("--limit", type=int, default=50, help="조회할 호스트 수")
+    p_ext.add_argument("--no-epss", action="store_true", help="EPSS 점수 조회 생략")
     p_ext.set_defaults(func=cmd_external)
 
     p_rep = sub.add_parser("report", help="HTML 리포트 생성")

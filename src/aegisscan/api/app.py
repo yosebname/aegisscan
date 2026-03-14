@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..data.session import get_engine, get_session_factory, init_db
-from ..data.models import Host, Port, ScanRun, Service, Banner, TLSCert, DiffFinding, ExternalObservation
+from ..data.models import Host, Port, ScanRun, Service, Banner, TLSCert, DiffFinding, ExternalObservation, Vulnerability, WebFinding
 
 
 @asynccontextmanager
@@ -130,15 +130,135 @@ async def tls_expiring(db: AsyncSession = Depends(get_db), days: int = 30):
     return [{"host_ip": row[1], "port": row[0].port, "not_after": str(row[0].not_after)} for row in rows]
 
 
+@app.get("/api/vulnerabilities", response_model=list)
+async def list_vulnerabilities(
+    db: AsyncSession = Depends(get_db),
+    severity: str | None = None,
+    min_epss: float | None = Query(None, description="Minimum EPSS score filter"),
+    limit: int = 100,
+):
+    q = select(Vulnerability, Host.ip).join(Host, Vulnerability.host_id == Host.id)
+    if severity:
+        q = q.where(Vulnerability.severity == severity)
+    if min_epss is not None:
+        q = q.where(Vulnerability.epss_score >= min_epss)
+    q = q.order_by(Vulnerability.epss_score.desc().nullslast()).limit(limit)
+    r = await db.execute(q)
+    return [
+        {
+            "id": v.id,
+            "host_ip": ip,
+            "port": v.port,
+            "cve_id": v.cve_id,
+            "source": v.source,
+            "epss_score": v.epss_score,
+            "epss_percentile": v.epss_percentile,
+            "severity": v.severity,
+            "cvss_score": v.cvss_score,
+            "discovered_at": str(v.discovered_at) if v.discovered_at else None,
+        }
+        for v, ip in r.all()
+    ]
+
+
+@app.get("/api/vulnerabilities/summary", response_model=dict)
+async def vuln_summary(db: AsyncSession = Depends(get_db)):
+    total_r = await db.execute(select(func.count(Vulnerability.id)))
+    critical_r = await db.execute(
+        select(func.count(Vulnerability.id)).where(Vulnerability.severity == "critical")
+    )
+    high_r = await db.execute(
+        select(func.count(Vulnerability.id)).where(Vulnerability.severity == "high")
+    )
+    unique_cve_r = await db.execute(
+        select(func.count(func.distinct(Vulnerability.cve_id)))
+    )
+    return {
+        "total_vulnerabilities": total_r.scalar() or 0,
+        "unique_cves": unique_cve_r.scalar() or 0,
+        "critical_count": critical_r.scalar() or 0,
+        "high_count": high_r.scalar() or 0,
+    }
+
+
+@app.get("/api/web-findings", response_model=list)
+async def list_web_findings(
+    db: AsyncSession = Depends(get_db),
+    finding_type: str | None = None,
+    severity: str | None = None,
+    limit: int = 100,
+):
+    q = select(WebFinding, Host.ip).join(Host, WebFinding.host_id == Host.id)
+    if finding_type:
+        q = q.where(WebFinding.finding_type == finding_type)
+    if severity:
+        q = q.where(WebFinding.severity == severity)
+    q = q.order_by(WebFinding.id.desc()).limit(limit)
+    r = await db.execute(q)
+    return [
+        {
+            "id": wf.id,
+            "host_ip": ip,
+            "port": wf.port,
+            "finding_type": wf.finding_type,
+            "severity": wf.severity,
+            "url": wf.url,
+            "matched_pattern": wf.matched_pattern,
+            "evidence": wf.evidence,
+            "screenshot_path": wf.screenshot_path,
+            "has_screenshot": wf.screenshot_path is not None,
+            "discovered_at": str(wf.discovered_at) if wf.discovered_at else None,
+        }
+        for wf, ip in r.all()
+    ]
+
+
+@app.get("/api/web-findings/summary", response_model=dict)
+async def web_findings_summary(db: AsyncSession = Depends(get_db)):
+    total_r = await db.execute(select(func.count(WebFinding.id)))
+    admin_r = await db.execute(
+        select(func.count(WebFinding.id)).where(WebFinding.finding_type == "admin_exposure")
+    )
+    info_r = await db.execute(
+        select(func.count(WebFinding.id)).where(WebFinding.finding_type == "info_leak")
+    )
+    dir_r = await db.execute(
+        select(func.count(WebFinding.id)).where(WebFinding.finding_type == "dir_listing")
+    )
+    ss_r = await db.execute(
+        select(func.count(WebFinding.id)).where(WebFinding.screenshot_path != None)
+    )
+    return {
+        "total": total_r.scalar() or 0,
+        "admin_exposure": admin_r.scalar() or 0,
+        "info_leak": info_r.scalar() or 0,
+        "dir_listing": dir_r.scalar() or 0,
+        "screenshots": ss_r.scalar() or 0,
+    }
+
+
+@app.get("/api/screenshots/{filename}")
+async def get_screenshot(filename: str):
+    ss_dir = Path("screenshots")
+    filepath = ss_dir / filename
+    if filepath.exists() and filepath.suffix == ".png":
+        return FileResponse(filepath, media_type="image/png")
+    return HTMLResponse("Not found", status_code=404)
+
+
 @app.get("/api/stats", response_model=dict)
 async def stats(db: AsyncSession = Depends(get_db)):
     hosts_r = await db.execute(select(func.count(Host.id)))
     ports_r = await db.execute(select(func.count(Port.id)).where(Port.state_connect == "open"))
     findings_r = await db.execute(select(func.count(DiffFinding.id)))
+    vulns_r = await db.execute(select(func.count(Vulnerability.id)))
+    web_r = await db.execute(select(func.count(WebFinding.id)))
     return {
         "total_hosts": hosts_r.scalar() or 0,
         "open_ports_count": ports_r.scalar() or 0,
         "diff_findings_count": findings_r.scalar() or 0,
+        "vulnerabilities_count": vulns_r.scalar() or 0,
+        "web_findings_count": web_r.scalar() or 0,
     }
 
 

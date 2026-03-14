@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Sequence
 
 from sqlalchemy import select
@@ -18,11 +19,13 @@ from ..data.models import (
     ScanRun,
     Service,
     TLSCert,
+    WebFinding,
 )
 from ..scanner.connect_scanner import ConnectScanner, ConnectScanResult, ConnectScanSummary
 from ..scanner.syn_scanner import SynScanner, SynScanResult, SynScanSummary, compare_connect_syn
-from ..enrichment.banner import BannerGrabber
+from ..enrichment.banner import BannerGrabber, BANNER_GRABBERS
 from ..enrichment.tls_inspector import TLSInspector
+from ..enrichment.web_analyzer import analyze_http_target, WebAnalysisReport
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +171,74 @@ async def run_enrichment(
     return count
 
 
+HTTP_PORTS = set(BANNER_GRABBERS.keys()) & {80, 443, 8080, 8443}
+
+
+async def run_web_analysis(
+    session: AsyncSession,
+    open_http_ports: List[tuple],
+    scan_run_id: Optional[int] = None,
+    screenshot_dir: Optional[Path] = None,
+    take_screenshots: bool = True,
+    on_enrich=None,
+    on_progress=None,
+) -> List[dict]:
+    """HTTP open 포트에 대해 웹 보안 분석 수행, 결과를 DB에 저장."""
+    from pathlib import Path as _P
+
+    if screenshot_dir is None:
+        screenshot_dir = _P("screenshots")
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+
+    all_findings: List[dict] = []
+    total = len(open_http_ports)
+
+    for idx, (host_ip, port) in enumerate(open_http_ports):
+        if on_progress:
+            on_progress(idx + 1, total, "Web analysis")
+
+        host_r = await session.execute(select(Host).where(Host.ip == host_ip))
+        host = host_r.scalar_one_or_none()
+        if not host:
+            continue
+
+        def _on_finding(f):
+            if on_enrich:
+                label = {"admin_exposure": "Admin", "info_leak": "InfoLeak", "dir_listing": "DirList"}.get(f.finding_type, "Web")
+                screenshot_note = " [screenshot]" if f.screenshot_path else ""
+                on_enrich(f.host, f.port, label, f"{f.evidence[:60]}{screenshot_note}")
+
+        report = await analyze_http_target(
+            host_ip, port,
+            screenshot_dir=screenshot_dir,
+            take_screenshots=take_screenshots,
+            on_finding=_on_finding,
+        )
+
+        for f in report.findings:
+            session.add(WebFinding(
+                host_id=host.id,
+                port=f.port,
+                finding_type=f.finding_type,
+                severity=f.severity,
+                url=f.url,
+                matched_pattern=f.matched_pattern,
+                evidence=f.evidence,
+                screenshot_path=f.screenshot_path,
+                scan_run_id=scan_run_id,
+            ))
+            all_findings.append({
+                "host": f.host, "port": f.port,
+                "finding_type": f.finding_type, "severity": f.severity,
+                "url": f.url, "evidence": f.evidence,
+                "screenshot_path": f.screenshot_path,
+            })
+
+        await session.flush()
+
+    return all_findings
+
+
 class ScanRunner:
     """전체 스캔 플로우: Connect(+ SYN) → DB 저장 → 불일치 분석 → Enrichment."""
 
@@ -270,6 +341,22 @@ class ScanRunner:
                 on_progress=self._on_progress,
             )
 
+        web_findings: List[dict] = []
+        if self.do_enrichment and open_host_ports:
+            http_ports = [(h, p) for h, p in open_host_ports if p in (80, 443, 8080, 8443, 9443, 3000, 5000, 8000, 8888)]
+            if not http_ports:
+                http_ports = [(h, p) for h, p in open_host_ports][:10]
+            if http_ports:
+                self._notify_phase("web_analysis")
+                web_findings = await run_web_analysis(
+                    self.session,
+                    http_ports[:50],
+                    scan_run_id=scan_run_id,
+                    take_screenshots=True,
+                    on_enrich=self._on_enrich,
+                    on_progress=self._on_progress,
+                )
+
         scan_run.end_time = datetime.utcnow()
         await self.session.flush()
 
@@ -278,5 +365,6 @@ class ScanRunner:
             "syn_summary": syn_summary,
             "mismatches": len(mismatches),
             "enriched_count": enriched_count,
+            "web_findings": web_findings,
         }
         return scan_run_id
