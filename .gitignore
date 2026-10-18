@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 환경변수·비밀값
+.env
+
+# 실행 결과물 (스캔 DB, 리포트, 스크린샷)
+*.db
+reports/
+screenshots/
+report_*.html
+
+# OS·에디터
+.DS_Store
+.idea/
+.vscode/
