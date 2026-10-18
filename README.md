@@ -6,6 +6,25 @@
 
 ---
 
+## 프로젝트 배경
+
+- **과정**: 구름 딥다이브 정보보호 16회차 3차 세미 프로젝트 (주제: 서비스 포트 스캐너 구현)
+- **기간**: 2026.03.04 ~ 2026.03.24
+
+## 팀 구성과 내 역할
+
+- **팀 인원**: TODO
+- **내가 맡은 부분**: TODO (모듈·기능 단위로 구체적으로)
+- **협업 환경**: 팀원 전원이 같은 환경에서 작업할 수 있도록, Tailscale로 제 Linux 서버에 SSH로 접속하는 공동 개발 환경을 구성했습니다.
+
+## AI 활용
+
+- 공동 개발 환경에서 AI 코딩 에이전트(Cursor)를 함께 사용해 코드를 작성했습니다.
+- 직접 실행하면서 문제점을 찾고, 팀원과 함께 수정했습니다.
+- 아직 고치지 못한 문제는 아래 [알려진 한계](#알려진-한계)에 정리해 두었습니다.
+
+---
+
 ## 전체 실행 흐름 요약
 
 ```
@@ -38,7 +57,7 @@
 
 | 항목 | 필수 여부 | 비고 |
 |------|-----------|------|
-| Python 3.10+ | **필수** | 3.10 / 3.11 / 3.12 / 3.14 확인됨 |
+| Python 3.10+ | **필수** | |
 | scapy | 선택 | SYN 스캔 사용 시 (`pip install scapy`) |
 | root/관리자 권한 | 선택 | SYN 스캔 시 raw socket 필요 |
 | Shodan/Censys API 키 | 선택 | 외부 관측 비교 + CVE 추출 기능 사용 시 |
@@ -48,16 +67,14 @@
 ### 설치 절차
 
 ```bash
-# 1) 프로젝트 폴더로 이동
-cd /Users/ohreo/aegisscan
+# 1) 저장소 받기
+git clone https://github.com/yosebname/aegisscan.git
+cd aegisscan
 
-# 2) 가상환경이 이미 만들어져 있으므로 활성화만 하면 됩니다
+# 2) 가상환경 만들고 설치
+python3 -m venv .venv
 source .venv/bin/activate
-
-# ※ 처음부터 설치하는 경우:
-#    python3 -m venv .venv
-#    source .venv/bin/activate
-#    pip install -e .
+pip install -e .
 
 # 3) (선택) 스크린샷 기능을 사용하려면 Playwright 설치
 pip install playwright
@@ -86,7 +103,7 @@ positional arguments:
 
 ## STEP 1. 환경 변수 설정 (.env)
 
-프로젝트 루트(`/Users/ohreo/aegisscan/`)에 `.env` 파일을 생성합니다. 외부 비교를 사용하지 않는다면 이 단계는 건너뛰어도 됩니다.
+프로젝트 루트에 `.env` 파일을 생성합니다(`.env.example`을 복사해도 됩니다). 외부 비교를 사용하지 않는다면 이 단계는 건너뛰어도 됩니다.
 
 ```bash
 cat > .env << 'EOF'
@@ -101,11 +118,6 @@ SHODAN_API_KEY=
 # Censys — https://search.censys.io/account/api 에서 발급
 CENSYS_API_ID=
 CENSYS_API_SECRET=
-
-# ===== 스캔 기본값 (보통 수정 불필요) =====
-DEFAULT_TIMEOUT_SEC=3.0
-DEFAULT_RETRIES=2
-DEFAULT_RATE_LIMIT_PER_SEC=100
 EOF
 ```
 
@@ -130,7 +142,7 @@ aegisscan scan \
 1. SQLite DB 초기화 (최초 1회 자동, `aegisscan.db` 파일 생성)
 2. 지정 호스트:포트에 TCP Connect 시도 → open / closed / filtered 판정
 3. open 포트에 대해 **배너 그랩** (HTTP Server 헤더, SSH 버전 등)
-4. HTTPS 포트(443, 8443)에 대해 **TLS 인증서** 수집
+4. HTTPS 포트(443, 8443)에 대해 **TLS 인증서** 수집 시도 (현재 결과가 저장되지 않음 — [알려진 한계](#알려진-한계) 참고)
 5. **웹 보안 자동 분석** (HTTP 포트 대상):
    - 관리자 페이지 노출 탐지 (23개 경로 프로빙)
    - 서버 정보 누출 탐지 (15개 패턴 매칭)
@@ -197,7 +209,6 @@ X-Powered-By 헤더, Traceback, Fatal error, Stack Trace
 Enriching open ports (Banner/TLS)...
 Enriching: [████████████████████████████████████████] 100% (3/3)
     ▸ 10.0.1.5:80 [Banner] http — GET / -> 200
-    ▸ 10.0.1.5:443 [TLS] subject=*.example.com expires=2026-08-15
 
 Web Security Analysis (Admin/InfoLeak/DirList)...
 Web analysis: [████████████████████████████████████████] 100% (2/2)
@@ -258,6 +269,8 @@ sudo $(which aegisscan) scan \
 - Connect 결과와 SYN 결과가 다르면 **"Connect vs SYN 불일치"** 가 자동으로 `diff_findings` 테이블에 기록됩니다.
   - 예: Connect=open인데 SYN=filtered → 방화벽/필터링 장비 개입 의심
 - 대시보드와 리포트에서 불일치 내역을 확인할 수 있습니다.
+
+> **주의**: raw socket 권한 없이 `--syn`을 쓰면 권한 오류가 난 포트가 filtered로 기록되어, 실제 방화벽이 없어도 불일치가 생깁니다. 반드시 `sudo`로 실행하세요([알려진 한계](#알려진-한계) 참고).
 
 ---
 
@@ -341,11 +354,11 @@ aegisscan external --source shodan --limit 50 --no-epss
 # 방법 1: aegisscan CLI로 시작 (권장)
 aegisscan serve --port 8000
 
-# 방법 2: uvicorn 직접 실행
-cd /Users/ohreo/aegisscan
-source .venv/bin/activate
-uvicorn aegisscan.api.app:app --reload --host 0.0.0.0 --port 8000
+# 방법 2: uvicorn 직접 실행 (프로젝트 루트, 가상환경 활성화 상태에서)
+uvicorn aegisscan.api.app:app --reload --host 127.0.0.1 --port 8000
 ```
+
+> **주의**: 대시보드와 API에는 인증이 없습니다. 스캔 결과가 그대로 노출되므로 `127.0.0.1`에서만 열고, `0.0.0.0`이나 외부 네트워크에 공개하지 마세요.
 
 ### 대시보드에서 확인 가능한 항목
 
@@ -572,13 +585,30 @@ aegisscan/
 │   ├── config.py          # 설정(.env 로드)
 │   ├── console.py         # CLI 컬러 출력, 결과 테이블 포맷
 │   └── cli.py             # CLI 진입점
-├── screenshots/           # 웹 보안 스크린샷 자동 저장 폴더
-├── .env                   # 환경변수 (API 키 등)
-├── aegisscan.db           # SQLite DB (자동 생성, 11개 테이블)
-├── reports/               # 생성된 리포트 저장 폴더
+├── .env.example           # 환경변수 예시 (복사해서 .env로 사용)
 ├── requirements.txt
 └── pyproject.toml
 ```
+
+실행하면 `aegisscan.db`, `reports/`, `screenshots/`, `.env`가 생기며, 모두 `.gitignore`로 저장소에서 제외됩니다.
+
+---
+
+## 알려진 한계
+
+아직 고치지 못한 문제입니다. 고치면 이 목록에서 지웁니다.
+
+| 영역 | 문제 | 위치 |
+|------|------|------|
+| 동시성 | 모든 프로브를 `asyncio.create_task`로 먼저 시작한 뒤 세마포어로 감싸서, 동시 연결 수가 제한되지 않습니다. 큰 대역을 스캔하면 파일 디스크립터가 고갈될 수 있습니다. | `scanner/connect_scanner.py` |
+| TLS | `CERT_NONE`으로 연결한 뒤 `getpeercert()`를 호출하는데, 검증하지 않은 인증서는 빈 dict로 반환됩니다. 그래서 TLS 인증서 정보가 저장되지 않고 'TLS 만료 임박'도 항상 비어 있습니다. | `enrichment/tls_inspector.py` |
+| SYN 스캔 | root 권한이 없으면 `PermissionError`를 filtered로 처리해서, Connect 결과와 비교할 때 거짓 불일치가 생깁니다. | `scanner/syn_scanner.py` |
+| 대시보드 | 웹 대시보드와 API에 인증이 없습니다. 기본값 `127.0.0.1`로만 실행하세요. | `api/app.py` |
+| EPSS | 요약 문구가 `top {percentile}`로 출력되어, 백분위 0.95(상위 5%)가 'top 95%'로 표시됩니다. | `service/external_compare.py` |
+| 입력 검증 | `--ports`에 0~65535 범위 검증이 없습니다. | `scanner/connect_scanner.py` |
+| 테스트 | 자동화 테스트가 아직 없습니다(`pyproject.toml`에 pytest 설정만 있음). | — |
+
+---
 
 ## 라이선스
 
